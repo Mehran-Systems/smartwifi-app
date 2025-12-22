@@ -23,12 +23,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.drawscope.Stroke
 import com.smartwifi.data.model.ConnectionSource
+import com.smartwifi.ui.LiquidRadar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,36 +113,49 @@ fun DashboardScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Top
             ) {
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(16.dp)) // Reduced 32->16
                 
                 // --- Radar Visual (Principal Focus) ---
+                val compass by viewModel.compassHeading.collectAsState()
+                val target by viewModel.targetBearing.collectAsState()
+                
+                // Calculate Relative Bearing for Pull
+                // If Target is 90 (East) and Compass is 0 (North), Pull is 90 (Right).
+                // If Target is 90 (East) and Compass is 90 (East), Pull is 0 (Up/Forward).!!
+                // Wait. Liquid Radar draws relative to screen "Top".
+                // If phone points North (0), and Target is East (90).
+                // We want the pull to be to the Right relative to the phone screen.
+                // Relative = Target - Compass. 
+                // Ex: 90 - 0 = 90 (Right). Correct.
+                // Ex: 90 - 90 = 0 (Up). Correct.
+                
+                val relativePull = target?.let { 
+                    var diff = it - compass // e.g. Target 90 - Compass 0 = 90
+                    if (diff < 0) diff += 360
+                    diff
+                }
+
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(280.dp)
+                    modifier = Modifier.size(260.dp) // Reduced 320->260
                 ) {
-                    // Outer Ripple
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        drawCircle(
-                            color = getRadarColor(uiState.internetStatus).copy(alpha = 0.2f),
-                            radius = size.minDimension / 2 * radarScale,
-                            style = Stroke(width = 4.dp.toPx())
-                        )
-                    }
+                    // Replaced Outer Ripple with Liquid Radar
+                    LiquidRadar(
+                        modifier = Modifier.fillMaxSize(),
+                        blobColor = getRadarColor(uiState.internetStatus),
+                        pullBearing = relativePull,
+                        pullStrength = 1.0f // Full strength if target exists
+                    )
                     
-                    // Main Circle
+                    // Main Circle (Inner Content)
                     Box(
                         modifier = Modifier
-                            .size(240.dp)
+                            .size(170.dp) // Reduced 200->170
                             .clip(CircleShape)
-                            .background(
-                                brush = Brush.radialGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.surfaceVariant,
-                                        MaterialTheme.colorScheme.background
-                                    )
-                                )
-                            )
-                            .border(8.dp, getRadarColor(uiState.internetStatus), CircleShape),
+                            // Transparent background to see liquid? Or semi-opaque
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
+                            // .border(4.dp, getRadarColor(uiState.internetStatus).copy(alpha=0.5f), CircleShape) // Optional border
+                            ,
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -150,7 +165,7 @@ fun DashboardScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                              
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(4.dp)) // Reduced 8->4
                             
                             // Dynamic Icon Logic
                             val connectionSource = uiState.connectionSource
@@ -159,7 +174,7 @@ fun DashboardScreen(
                                     Icon(
                                         imageVector = getMobileSignalIcon(uiState.signalStrength),
                                         contentDescription = "Mobile Data",
-                                        modifier = Modifier.size(64.dp),
+                                        modifier = Modifier.size(48.dp), // Reduced 64->48
                                         tint = getRadarColor(uiState.internetStatus)
                                     )
                                 }
@@ -167,17 +182,17 @@ fun DashboardScreen(
                                     Icon(
                                         imageVector = getWifiSignalIcon(uiState.signalStrength),
                                         contentDescription = "WiFi",
-                                        modifier = Modifier.size(64.dp),
+                                        modifier = Modifier.size(48.dp), // Reduced 64->48
                                         tint = getRadarColor(uiState.internetStatus)
                                     )
                                 }
                             }
                             
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(8.dp)) // Reduced 16->8
                             
                             Text(
                                 text = if (connectionSource == ConnectionSource.MOBILE_DATA) uiState.currentSsid else uiState.currentSsid.replace("\"", ""),
-                                style = MaterialTheme.typography.headlineMedium,
+                                style = MaterialTheme.typography.headlineSmall, // Reduced HeadlineMedium->HeadlineSmall
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onBackground
                             )
@@ -190,7 +205,7 @@ fun DashboardScreen(
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(16.dp)) // Reduced 32->16
 
                 // --- Triangle Status Bar (Restored) ---
                 Row(
@@ -216,7 +231,7 @@ fun DashboardScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp)) // Reduced 24->16
         
                 // --- Network Speed (Link Speed / Usage) ---
                 Card(
@@ -224,7 +239,7 @@ fun DashboardScreen(
                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        modifier = Modifier.padding(12.dp).fillMaxWidth(), // Padding 16->12
                         horizontalArrangement = Arrangement.SpaceAround,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -232,19 +247,19 @@ fun DashboardScreen(
                              Text("Link Speed", style = MaterialTheme.typography.labelMedium)
                              Text(
                                  text = "${uiState.linkSpeed} Mbps", 
-                                 style = MaterialTheme.typography.titleLarge,
+                                 style = MaterialTheme.typography.titleMedium, // Reduced TitleLarge->TitleMedium
                                  fontWeight = FontWeight.Bold,
                                  color = MaterialTheme.colorScheme.primary
                              )
                          }
                          
-                         Box(modifier = Modifier.width(1.dp).height(40.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.2f)))
+                         Box(modifier = Modifier.width(1.dp).height(32.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.2f))) // Height 40->32
         
                          Column(horizontalAlignment = Alignment.CenterHorizontally) {
                              Text("Current Usage", style = MaterialTheme.typography.labelMedium)
                              Text(
                                  text = uiState.currentUsage, 
-                                 style = MaterialTheme.typography.titleLarge,
+                                 style = MaterialTheme.typography.titleMedium, // TitleLarge->TitleMedium
                                  fontWeight = FontWeight.Bold,
                                  color = MaterialTheme.colorScheme.secondary
                              )
@@ -252,7 +267,7 @@ fun DashboardScreen(
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp)) // Reduced 24->16
 
                 // --- Quick Action Cards (Restored) ---
                 Row(
@@ -277,7 +292,7 @@ fun DashboardScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp)) // Reduced 24->16
                 
                 OutlinedButton(onClick = onSettingsClick, modifier = Modifier.fillMaxWidth()) {
                     Text("Advanced Settings")
@@ -324,24 +339,31 @@ fun QuickActionCard(
         )
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(12.dp).fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(imageVector = icon, contentDescription = null)
             Spacer(modifier = Modifier.height(8.dp))
-            Text(text = label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            Text(
+                text = label, 
+                style = MaterialTheme.typography.labelMedium, 
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
             Spacer(modifier = Modifier.height(4.dp))
              Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 12.sp
+                lineHeight = 12.sp,
+                textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = if (isActive) "ON" else "OFF",
                 style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
             )
         }
     }
