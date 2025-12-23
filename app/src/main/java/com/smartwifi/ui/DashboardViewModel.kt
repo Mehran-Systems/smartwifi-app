@@ -14,7 +14,8 @@ import javax.inject.Inject
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val repository: SmartWifiRepository,
-    private val signalSensor: com.smartwifi.logic.SignalDirectionSensor
+    private val signalSensor: com.smartwifi.logic.SignalDirectionSensor,
+    private val speedTestManager: com.smartwifi.logic.FastSpeedTestManager
 ) : ViewModel() {
 
     val uiState: StateFlow<AppUiState> = repository.uiState
@@ -37,6 +38,15 @@ class DashboardViewModel @Inject constructor(
             repository.uiState.collect { state ->
                 // Pass RSSI to sensor
                 signalSensor.onRssiUpdate(state.signalStrength)
+            }
+        }
+
+        // Silent metadata fetch on app start
+        viewModelScope.launch {
+            try {
+                speedTestManager.fetchMetadata()
+            } catch (e: Exception) {
+                // Ignore silent fetch errors
             }
         }
     }

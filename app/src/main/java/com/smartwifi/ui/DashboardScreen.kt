@@ -53,61 +53,17 @@ fun DashboardScreen(
         label = "RadarScale"
     )
 
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
-
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet {
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "Smart WiFi", 
-                    modifier = Modifier.padding(16.dp), 
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Divider()
-                NavigationDrawerItem(
-                    label = { Text(text = "Speed Test") },
-                    selected = false,
-                    onClick = { 
-                        scope.launch { drawerState.close() }
-                        onSpeedTestClick()
-                    },
-                    icon = { Icon(Icons.Default.Speed, contentDescription = null) },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-                 NavigationDrawerItem(
-                    label = { Text(text = "Settings") },
-                    selected = false,
-                    onClick = { 
-                        scope.launch { drawerState.close() }
-                        onSettingsClick()
-                    },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-            }
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Dashboard") }
+            )
         }
-    ) {
-        Scaffold(
-            topBar = {
-                // Simple Top Bar for Menu
-                CenterAlignedTopAppBar(
-                    title = { Text("Dashboard") },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu")
-                        }
-                    }
-                )
-            }
-        ) { padding ->
-            Column(
-                modifier = Modifier
-                    .padding(padding)
-                    .fillMaxSize()
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -116,90 +72,90 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(16.dp)) // Reduced 32->16
                 
                 // --- Radar Visual (Principal Focus) ---
-                val compass by viewModel.compassHeading.collectAsState()
-                val target by viewModel.targetBearing.collectAsState()
-                
-                // Calculate Relative Bearing for Pull
-                // If Target is 90 (East) and Compass is 0 (North), Pull is 90 (Right).
-                // If Target is 90 (East) and Compass is 90 (East), Pull is 0 (Up/Forward).!!
-                // Wait. Liquid Radar draws relative to screen "Top".
-                // If phone points North (0), and Target is East (90).
-                // We want the pull to be to the Right relative to the phone screen.
-                // Relative = Target - Compass. 
-                // Ex: 90 - 0 = 90 (Right). Correct.
-                // Ex: 90 - 90 = 0 (Up). Correct.
-                
-                val relativePull = target?.let { 
-                    var diff = it - compass // e.g. Target 90 - Compass 0 = 90
-                    if (diff < 0) diff += 360
-                    diff
-                }
+                // Sonar Radar Implementation
+
+                val relativePull = null // Not used for Sonar style currently
 
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(260.dp) // Reduced 320->260
+                    modifier = Modifier.size(340.dp) // Large area for ripples
                 ) {
-                    // Replaced Outer Ripple with Liquid Radar
+                    // 1. Background Ripples (Sonar)
+                    val radarColor = getRadarColor(uiState.internetStatus)
                     LiquidRadar(
                         modifier = Modifier.fillMaxSize(),
-                        blobColor = getRadarColor(uiState.internetStatus),
-                        pullBearing = relativePull,
-                        pullStrength = 1.0f // Full strength if target exists
+                        blobColor = radarColor,
+                        pulseSpeed = if (uiState.internetStatus == "Connected") 1.0f else 0.5f
                     )
                     
-                    // Main Circle (Inner Content)
+                    // 2. The Orb (Center)
                     Box(
+                        contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .size(170.dp) // Reduced 200->170
+                            .size(220.dp)
                             .clip(CircleShape)
-                            // Transparent background to see liquid? Or semi-opaque
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
-                            // .border(4.dp, getRadarColor(uiState.internetStatus).copy(alpha=0.5f), CircleShape) // Optional border
-                            ,
-                        contentAlignment = Alignment.Center
+                            .background(MaterialTheme.colorScheme.surface)
+                            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha=0.1f), CircleShape)
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "Status",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                             
-                            Spacer(modifier = Modifier.height(4.dp)) // Reduced 8->4
-                            
-                            // Dynamic Icon Logic
+                        // 3. Signal Strength Progress Bar (Around Orb)
+                        // Map RSSI (-100 to -50) to 0.0 - 1.0
+                        val rssi = uiState.signalStrength
+                        val signalProgress = ((rssi + 100).toFloat() / 50f).coerceIn(0f, 1f)
+                        
+                        // Track (Background Ring)
+                        CircularProgressIndicator(
+                            progress = 1f,
+                            modifier = Modifier.fillMaxSize(),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            strokeWidth = 6.dp
+                        )
+                        
+                        // Value (Foreground Ring)
+                        CircularProgressIndicator(
+                            progress = signalProgress,
+                            modifier = Modifier.fillMaxSize(),
+                            color = radarColor,
+                            strokeWidth = 6.dp
+                        )
+                    
+                        // 4. Orb Content
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                             // Dynamic Icon Logic
                             val connectionSource = uiState.connectionSource
-                            when (connectionSource) {
-                                ConnectionSource.MOBILE_DATA -> {
-                                    Icon(
-                                        imageVector = getMobileSignalIcon(uiState.signalStrength),
-                                        contentDescription = "Mobile Data",
-                                        modifier = Modifier.size(48.dp), // Reduced 64->48
-                                        tint = getRadarColor(uiState.internetStatus)
-                                    )
-                                }
-                                else -> {
-                                    Icon(
-                                        imageVector = getWifiSignalIcon(uiState.signalStrength),
-                                        contentDescription = "WiFi",
-                                        modifier = Modifier.size(48.dp), // Reduced 64->48
-                                        tint = getRadarColor(uiState.internetStatus)
-                                    )
-                                }
+                            val signalIcon = when (connectionSource) {
+                                ConnectionSource.MOBILE_DATA -> getMobileSignalIcon(uiState.signalStrength)
+                                else -> getWifiSignalIcon(uiState.signalStrength)
                             }
                             
-                            Spacer(modifier = Modifier.height(8.dp)) // Reduced 16->8
+                            Icon(
+                                imageVector = signalIcon,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = radarColor
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
                             
                             Text(
                                 text = if (connectionSource == ConnectionSource.MOBILE_DATA) uiState.currentSsid else uiState.currentSsid.replace("\"", ""),
-                                style = MaterialTheme.typography.headlineSmall, // Reduced HeadlineMedium->HeadlineSmall
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground
+                                textAlign = TextAlign.Center,
+                                maxLines = 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
+                            
+                            Spacer(modifier = Modifier.height(4.dp))
+
                             Text(
-                                text = uiState.internetStatus, 
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (uiState.internetStatus == "Connected") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                text = "${uiState.frequencyBand} • ${uiState.signalStrength} dBm", 
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }
@@ -270,38 +226,60 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(16.dp)) // Reduced 24->16
 
                 // --- Quick Action Cards (Restored) ---
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    QuickActionCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Gamepad,
-                        label = "Gaming Mode",
-                        description = "Pause scanning",
-                        isActive = uiState.isGamingMode,
-                        onClick = { viewModel.toggleGamingMode() }
-                    )
-                    QuickActionCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.SignalCellular4Bar,
-                        label = "Data Fallback",
-                        description = "Mobile backup",
-                        isActive = uiState.isDataFallback,
-                        onClick = { viewModel.toggleDataFallback() }
-                    )
-                }
+                // --- Quick Action Grid (2x2) ---
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Row 1: Toggles
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        QuickActionCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Default.Gamepad,
+                            label = "Gaming Mode",
+                            description = "Pause scanning",
+                            isActive = uiState.isGamingMode,
+                            onClick = { viewModel.toggleGamingMode() }
+                        )
+                        QuickActionCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Default.SignalCellular4Bar,
+                            label = "Data Fallback",
+                            description = "Mobile backup",
+                            isActive = uiState.isDataFallback,
+                            onClick = { viewModel.toggleDataFallback() }
+                        )
+                    }
 
-                Spacer(modifier = Modifier.height(16.dp)) // Reduced 24->16
-                
-                OutlinedButton(onClick = onSettingsClick, modifier = Modifier.fillMaxWidth()) {
-                    Text("Advanced Settings")
+                    // Row 2: Navigation
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        QuickActionCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Default.Speed,
+                            label = "Speed Test",
+                            description = null,
+                            isActive = false, 
+                            showStatus = false,
+                            onClick = onSpeedTestClick
+                        )
+                        QuickActionCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Default.Settings,
+                            label = "Settings",
+                            description = null,
+                            isActive = false, 
+                            showStatus = false,
+                            onClick = onSettingsClick
+                        )
+                    }
                 }
     }
     // --- Switch Confirmation Dialog Removed (Auto-Switch enabled) ---
     // if (uiState.pendingSwitchNetwork != null) { ... }
         }
-    }
 }
 
 @Composable
@@ -327,8 +305,9 @@ fun QuickActionCard(
     modifier: Modifier = Modifier, 
     icon: ImageVector, 
     label: String, 
-    description: String,
-    isActive: Boolean,
+    description: String? = null,
+    isActive: Boolean = false,
+    showStatus: Boolean = true,
     onClick: () -> Unit
 ) {
     Card(
@@ -350,21 +329,27 @@ fun QuickActionCard(
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(4.dp))
-             Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 12.sp,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = if (isActive) "ON" else "OFF",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
+            
+            if (description != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                 Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 12.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+            
+            if (showStatus) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = if (isActive) "ON" else "OFF",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }

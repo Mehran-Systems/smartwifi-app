@@ -1,14 +1,13 @@
 package com.smartwifi.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.rounded.ArrowDownward
-import androidx.compose.material.icons.rounded.ArrowUpward
-import androidx.compose.material.icons.rounded.HourglassEmpty
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,7 +36,7 @@ fun SpeedTestScreen(
             CenterAlignedTopAppBar(
                 title = { 
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("SpeedTest", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("Speed Test", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text("Powered by Fast.com", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
@@ -47,41 +46,107 @@ fun SpeedTestScreen(
                      }
                 }
             )
+        },
+        bottomBar = {
+            Box(
+                 modifier = Modifier
+                     .fillMaxWidth()
+                     .padding(24.dp)
+                     .height(56.dp)
+                     .clip(MaterialTheme.shapes.extraLarge)
+                     .background(
+                          if (testState is FastSpeedTestManager.TestState.Running || testState is FastSpeedTestManager.TestState.Preparing) 
+                              MaterialTheme.colorScheme.surfaceVariant 
+                          else MaterialTheme.colorScheme.primary
+                     )
+                     .clickable(enabled = testState !is FastSpeedTestManager.TestState.Running && testState !is FastSpeedTestManager.TestState.Preparing) {
+                         viewModel.startTest()
+                     },
+                 contentAlignment = Alignment.Center
+            ) {
+                if (testState is FastSpeedTestManager.TestState.Running) {
+                     val state = testState as FastSpeedTestManager.TestState.Running
+                     Box(
+                         modifier = Modifier
+                             .fillMaxHeight()
+                             .fillMaxWidth(state.progress)
+                             .align(Alignment.CenterStart)
+                             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)) // Revert to primary tint
+                     )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val icon = when(testState) {
+                         is FastSpeedTestManager.TestState.Running -> {
+                             if ((testState as FastSpeedTestManager.TestState.Running).phase == FastSpeedTestManager.TestPhase.DOWNLOAD) Icons.Rounded.ArrowDownward else Icons.Rounded.ArrowUpward
+                         }
+                         is FastSpeedTestManager.TestState.Preparing -> null // No icon for connecting
+                         else -> Icons.Rounded.PlayArrow
+                    }
+                    val text = when(testState) {
+                        is FastSpeedTestManager.TestState.Preparing -> "Connecting..."
+                        is FastSpeedTestManager.TestState.Running -> {
+                            if ((testState as FastSpeedTestManager.TestState.Running).phase == FastSpeedTestManager.TestPhase.DOWNLOAD) "Downloading..." else "Uploading..."
+                        }
+                        is FastSpeedTestManager.TestState.Finished -> "Test Again"
+                        else -> "Start Speed Test"
+                    }
+                    
+                    val contentColor = if (testState is FastSpeedTestManager.TestState.Running || testState is FastSpeedTestManager.TestState.Preparing) 
+                        MaterialTheme.colorScheme.onSurfaceVariant 
+                    else MaterialTheme.colorScheme.onPrimary
+                    
+                    if (icon != null) {
+                        Icon(
+                            imageVector = icon, 
+                            contentDescription = null, 
+                            tint = contentColor
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor
+                    )
+                }
+            }
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp) // Spaced evenly
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            
-            // 1. Grid Boxes (Download / Upload)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 1. Grid Boxes (Equal Height)
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Download Box
                 Card(
-                     modifier = Modifier.weight(1f),
+                     modifier = Modifier.weight(1f).fillMaxHeight(),
                      colors = CardDefaults.cardColors(
                          containerColor = if (testState is FastSpeedTestManager.TestState.Running && (testState as FastSpeedTestManager.TestState.Running).phase == FastSpeedTestManager.TestPhase.DOWNLOAD) 
                              MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
                      )
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        modifier = Modifier.padding(16.dp).fillMaxWidth().fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Text("Download", style = MaterialTheme.typography.labelMedium)
                         Spacer(modifier = Modifier.height(8.dp))
                         
-                        // Logic: 
-                        // If Finished -> Show Final
-                        // If Uploading -> Show Final (from metricData)
-                        // If Downloading -> Show Live
                         val dlVal = when {
                             testState is FastSpeedTestManager.TestState.Finished -> (testState as FastSpeedTestManager.TestState.Finished).downloadSpeed
                             testState is FastSpeedTestManager.TestState.Running && (testState as FastSpeedTestManager.TestState.Running).phase == FastSpeedTestManager.TestPhase.UPLOAD -> metricData.downloadSpeed ?: 0.0
@@ -92,20 +157,34 @@ fun SpeedTestScreen(
                         val dlText = if (dlVal != null) "%.0f".format(dlVal) else "-"
                         Text(dlText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                         Text("Mbps", style = MaterialTheme.typography.labelSmall)
+                        
+                        if (metricData.downloadJitter != null || metricData.jitter != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Rounded.GraphicEq, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    "${metricData.downloadJitter ?: metricData.jitter} ms", 
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
                 
                 // Upload Box
                 Card(
-                     modifier = Modifier.weight(1f),
+                     modifier = Modifier.weight(1f).fillMaxHeight(),
                      colors = CardDefaults.cardColors(
                          containerColor = if (testState is FastSpeedTestManager.TestState.Running && (testState as FastSpeedTestManager.TestState.Running).phase == FastSpeedTestManager.TestPhase.UPLOAD) 
                              MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
                      )
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        modifier = Modifier.padding(16.dp).fillMaxWidth().fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Text("Upload", style = MaterialTheme.typography.labelMedium)
                         Spacer(modifier = Modifier.height(8.dp))
@@ -119,14 +198,26 @@ fun SpeedTestScreen(
                         val ulText = if (ulVal != null) "%.0f".format(ulVal) else "-"
                         Text(ulText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                         Text("Mbps", style = MaterialTheme.typography.labelSmall)
+
+                        if (metricData.uploadJitter != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Rounded.GraphicEq, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    "${metricData.uploadJitter} ms", 
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             }
 
-            // 2. Large Live Number & Progress
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(vertical = 32.dp)
+                modifier = Modifier.padding(vertical = 12.dp)
             ) {
                  val currentSpeed = when(testState) {
                     is FastSpeedTestManager.TestState.Running -> (testState as FastSpeedTestManager.TestState.Running).speedMbps
@@ -134,97 +225,129 @@ fun SpeedTestScreen(
                     else -> 0.0
                  }
                  
-                 Text(
-                    text = "%.0f".format(currentSpeed),
-                    fontSize = 112.sp, // Very Large
-                    lineHeight = 112.sp,
-                    fontWeight = FontWeight.Thin, // Slim Font
-                    color = MaterialTheme.colorScheme.primary
-                 )
-                 Text(
-                     text = "Mbps", 
-                     style = MaterialTheme.typography.headlineSmall, 
-                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                     fontWeight = FontWeight.Light
-                 )
-                 
-                 Spacer(modifier = Modifier.height(24.dp))
-                 
-                 // Progress Bar
-                 if (testState is FastSpeedTestManager.TestState.Running) {
-                     val state = testState as FastSpeedTestManager.TestState.Running
+                 // Compact Gauge Size
+                 Box(contentAlignment = Alignment.Center, modifier = Modifier.size(220.dp)) {
+                     com.smartwifi.ui.components.SpeedometerGauge(
+                         currentValue = currentSpeed,
+                         maxValue = 100.0,
+                         isConnected = testState !is FastSpeedTestManager.TestState.Error,
+                         modifier = Modifier.fillMaxSize()
+                     )
+                     
                      Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                         LinearProgressIndicator(
-                             progress = state.progress,
-                             modifier = Modifier.width(200.dp).height(4.dp),
-                             trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                             color = MaterialTheme.colorScheme.primary
-                         )
-                         Spacer(modifier = Modifier.height(8.dp))
                          Text(
-                             text = if (state.phase == FastSpeedTestManager.TestPhase.DOWNLOAD) "Downloading..." else "Uploading...",
-                             style = MaterialTheme.typography.labelSmall,
-                             color = MaterialTheme.colorScheme.primary
+                            text = "%.0f".format(currentSpeed),
+                            fontSize = 48.sp, // Reduced Font
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                          )
+                         Text(
+                             text = "Mbps", 
+                             style = MaterialTheme.typography.titleMedium, 
+                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                         )
+                         
+                         Spacer(modifier = Modifier.height(4.dp))
+                         
+                         if (testState is FastSpeedTestManager.TestState.Error) {
+                             Text("Offline", color = Color(0xFFF44336), style = MaterialTheme.typography.labelMedium)
+                         } else {
+                             Text("Connected", color = Color(0xFF4CAF50), style = MaterialTheme.typography.labelMedium)
+                         }
                      }
                  }
             }
             
-            // 3. Ping Row (Icons + Values)
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                 PingItem("Idle", metricData.idlePing?.toString() ?: "-", Icons.Rounded.HourglassEmpty)
-                 PingItem("Down", "-", Icons.Rounded.ArrowDownward) // Placeholder
-                 PingItem("Up", "-", Icons.Rounded.ArrowUpward) // Placeholder
-            }
-            
             Divider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            // 4. Client / Server Info
+            // 4. Detailed Metrics Grid
             Column(
-                modifier = Modifier.fillMaxWidth(), 
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                InfoRow("Client", metricData.clientIp ?: "Locating...")
-                InfoRow("Server", metricData.serverHost ?: "Selecting...")
+                // Row 1: Client & Server
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Client Info
+                    MetricCell(
+                        modifier = Modifier.weight(1f), 
+                        label = "Client", 
+                        value = buildString {
+                            append(metricData.userLocation ?: "-")
+                            if (metricData.clientIp != null) append("\n${metricData.clientIp}")
+                            if (metricData.clientIsp != null) append("\n${metricData.clientIsp}")
+                        }, 
+                        icon = Icons.Rounded.Person
+                    )
+                    
+                    // Server Info
+                    MetricCell(
+                        modifier = Modifier.weight(1f), 
+                        label = "Server", 
+                        value = buildString {
+                            if (metricData.serverLocation != null) append("${metricData.serverLocation}\n")
+                            append(metricData.serverName ?: "-")
+                        }, 
+                        icon = Icons.Rounded.Dns
+                    )
+                }
+
+                // Row 2: Internal IP & Packet Loss
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                     MetricCell(
+                        modifier = Modifier.weight(1f),
+                        label = "Internal IP",
+                        value = metricData.internalIp ?: "-",
+                        icon = Icons.Rounded.Router
+                    )
+                     MetricCell(Modifier.weight(1f), "Packet Loss", if (metricData.packetLoss != null) "%.1f%%".format(metricData.packetLoss) else "-", Icons.Rounded.Warning)
+                }
+                
+                // Row 3: Pings (Idle Only)
+                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                     MetricCell(Modifier.weight(1f), "Idle Ping", "${metricData.idlePing ?: "-"} ms", Icons.Rounded.HourglassEmpty)
+                }
             }
             
-            Spacer(modifier = Modifier.weight(1f))
-
-            // 5. Action Button
-            Button(
-                onClick = { viewModel.startTest() },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                enabled = testState !is FastSpeedTestManager.TestState.Running
-            ) {
-                Icon(if (testState is FastSpeedTestManager.TestState.Running) Icons.Rounded.Stop else Icons.Rounded.PlayArrow, null)
-                Spacer(Modifier.width(8.dp))
-                Text(if (testState is FastSpeedTestManager.TestState.Running) "Testing..." else "Start Speed Test")
-            }
+            // Spacer to ensure content doesn't get hidden behind bottom bar if scroll is at very bottom
+            Spacer(modifier = Modifier.height(80.dp))
         }
     }
 }
 
 @Composable
-fun PingItem(label: String, value: String, icon: ImageVector) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+fun MetricCell(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: String,
+    icon: ImageVector
+) {
+    Row(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.5f), MaterialTheme.shapes.small)
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon, 
+            contentDescription = null, 
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+        )
         Spacer(Modifier.width(8.dp))
         Column {
-             Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+             Text(
+                 text = value,
+                 style = MaterialTheme.typography.labelLarge, 
+                 fontWeight = FontWeight.Bold,
+                 maxLines = 3,
+                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+             )
+             Text(
+                 text = label, 
+                 style = MaterialTheme.typography.labelSmall, // Reduced size
+                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                 maxLines = 1
+             )
         }
-    }
-}
-
-@Composable
-fun InfoRow(label: String, value: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("$label: ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
     }
 }
