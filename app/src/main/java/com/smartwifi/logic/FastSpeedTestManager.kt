@@ -261,10 +261,11 @@ class FastSpeedTestManager @Inject constructor() {
         val updateInterval = 200L
         var lastUpdate = startTime
         var urlIndex = 0
-        var currentSpeed = 0.0
+        
+        val speedSamples = mutableListOf<Double>()
         
         try {
-            while (System.currentTimeMillis() < endTime) {
+            while (System.currentTimeMillis() < endTime && _testState.value !is TestState.Error) {
                 val targetUrl = urls[urlIndex % urls.size]
                 try {
                     val url = URL(targetUrl)
@@ -275,21 +276,32 @@ class FastSpeedTestManager @Inject constructor() {
                     val stream = conn.inputStream
                     val buffer = ByteArray(65536)
                     
-                    while (System.currentTimeMillis() < endTime) {
+                    var loopBytes = 0L
+                    
+                    while (System.currentTimeMillis() < endTime && _testState.value !is TestState.Error) {
                         val read = stream.read(buffer)
                         if (read == -1) break 
                         
                         totalBytes += read
+                        loopBytes += read
                         
                         val now = System.currentTimeMillis()
                         if (now - lastUpdate > updateInterval) {
-                            val durationSeconds = (now - startTime) / 1000.0
+                            val durationSeconds = (now - lastUpdate) / 1000.0
                             if (durationSeconds > 0) {
-                                val bits = totalBytes * 8.0
-                                currentSpeed = (bits / durationSeconds) / 1_000_000.0
+                                val bits = loopBytes * 8.0
+                                val instantSpeed = (bits / durationSeconds) / 1_000_000.0
+                                
+                                // Only record samples that are valid (non-zero)
+                                if (instantSpeed > 0) speedSamples.add(instantSpeed)
+                                
                                 val progress = (now - startTime) / 10_000f
-                                _testState.value = TestState.Running(currentSpeed, progress.coerceIn(0f, 1f), TestPhase.DOWNLOAD)
+                                
+                                // Show instant speed to user (or maybe an EMA smoothed version)
+                                _testState.value = TestState.Running(instantSpeed, progress.coerceIn(0f, 1f), TestPhase.DOWNLOAD)
+                                
                                 lastUpdate = now
+                                loopBytes = 0L // Reset loop bytes for next instant interval
                             }
                         }
                     }
@@ -306,8 +318,12 @@ class FastSpeedTestManager @Inject constructor() {
             monitorJob.cancel()
         }
         
-        val totalDuration = (System.currentTimeMillis() - startTime) / 1000.0
-        if (totalDuration > 0) ((totalBytes * 8.0) / totalDuration) / 1_000_000.0 else 0.0
+        // Calculate Final Speed: Average of top 70% samples to exclude slow start/end
+        if (speedSamples.isNotEmpty()) {
+            speedSamples.sortedDescending().take((speedSamples.size * 0.7).toInt().coerceAtLeast(1)).average()
+        } else {
+            0.0
+        }
     }
 
     private suspend fun runUploadTest(urls: List<String>): Double = withContext(Dispatchers.IO) {
@@ -323,13 +339,13 @@ class FastSpeedTestManager @Inject constructor() {
         val updateInterval = 200L
         var lastUpdate = startTime
         var urlIndex = 0
-        var currentSpeed = 0.0
         
         // Random buffer to upload
         val buffer = ByteArray(65536)
+        val speedSamples = mutableListOf<Double>()
         
         try {
-            while (System.currentTimeMillis() < endTime) {
+            while (System.currentTimeMillis() < endTime && _testState.value !is TestState.Error) {
                 val targetUrl = urls[urlIndex % urls.size]
                 try {
                     val url = URL(targetUrl)
@@ -341,26 +357,31 @@ class FastSpeedTestManager @Inject constructor() {
                     conn.readTimeout = 3000
                     
                     val stream = conn.outputStream
+                    var loopBytes = 0L
                     
-                    while (System.currentTimeMillis() < endTime) {
+                    while (System.currentTimeMillis() < endTime && _testState.value !is TestState.Error) {
                         stream.write(buffer)
-                        totalBytes += buffer.size
+                        val written = buffer.size
+                        totalBytes += written
+                        loopBytes += written
                         
                         val now = System.currentTimeMillis()
                         if (now - lastUpdate > updateInterval) {
-                            val durationSeconds = (now - startTime) / 1000.0
+                            val durationSeconds = (now - lastUpdate) / 1000.0
                             if (durationSeconds > 0) {
-                                val bits = totalBytes * 8.0
-                                currentSpeed = (bits / durationSeconds) / 1_000_000.0
+                                val bits = loopBytes * 8.0
+                                val instantSpeed = (bits / durationSeconds) / 1_000_000.0
+                                
+                                if (instantSpeed > 0) speedSamples.add(instantSpeed)
+                                
                                 val progress = (now - startTime) / 10_000f
-                                _testState.value = TestState.Running(currentSpeed, progress.coerceIn(0f, 1f), TestPhase.UPLOAD)
+                                _testState.value = TestState.Running(instantSpeed, progress.coerceIn(0f, 1f), TestPhase.UPLOAD)
                                 lastUpdate = now
+                                loopBytes = 0L
                             }
                         }
                     }
                     stream.close()
-                    // Read response? usually ignore for speed test, just need to push bits
-                    // conn.inputStream.close() 
                     conn.disconnect()
                 } catch (e: Exception) {
                     Log.w("FastSpeedTest", "UL fail $targetUrl", e)
@@ -373,8 +394,11 @@ class FastSpeedTestManager @Inject constructor() {
             monitorJob.cancel()
         }
         
-        val totalDuration = (System.currentTimeMillis() - startTime) / 1000.0
-        if (totalDuration > 0) ((totalBytes * 8.0) / totalDuration) / 1_000_000.0 else 0.0
+        if (speedSamples.isNotEmpty()) {
+            speedSamples.sortedDescending().take((speedSamples.size * 0.7).toInt().coerceAtLeast(1)).average()
+        } else {
+            0.0
+        }
     }
     
     private fun getInternalIpAddress(): String {

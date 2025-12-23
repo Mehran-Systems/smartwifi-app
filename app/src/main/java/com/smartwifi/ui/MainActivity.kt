@@ -60,6 +60,12 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("speed_test") {
                              SpeedTestScreen(
+                                onBackClick = { navController.popBackStack() },
+                                onHistoryClick = { navController.navigate("history") }
+                            )
+                        }
+                        composable("history") {
+                            SpeedTestHistoryScreen(
                                 onBackClick = { navController.popBackStack() }
                             )
                         }

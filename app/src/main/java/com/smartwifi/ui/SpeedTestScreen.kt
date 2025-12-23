@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,6 +26,7 @@ import com.smartwifi.logic.FastSpeedTestManager
 @Composable
 fun SpeedTestScreen(
     onBackClick: () -> Unit,
+    onHistoryClick: () -> Unit,
     viewModel: SpeedTestViewModel = hiltViewModel()
 ) {
     val testState by viewModel.testManager.testState.collectAsState()
@@ -44,6 +46,11 @@ fun SpeedTestScreen(
                      IconButton(onClick = onBackClick) {
                          Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                      }
+                },
+                actions = {
+                    IconButton(onClick = onHistoryClick) {
+                        Icon(Icons.Default.History, contentDescription = "History")
+                    }
                 }
             )
         },
@@ -225,19 +232,27 @@ fun SpeedTestScreen(
                     else -> 0.0
                  }
                  
+                 val isUpload = testState is FastSpeedTestManager.TestState.Running && 
+                               (testState as FastSpeedTestManager.TestState.Running).phase == FastSpeedTestManager.TestPhase.UPLOAD
+                               
+                 val gaugeColor = if (isUpload) Color(0xFFFF9800) else Color(0xFF4CAF50)
+                 
                  // Compact Gauge Size
-                 Box(contentAlignment = Alignment.Center, modifier = Modifier.size(220.dp)) {
+                 Box(contentAlignment = Alignment.Center, modifier = Modifier.size(240.dp)) { // Slightly larger box to fit text below
                      com.smartwifi.ui.components.SpeedometerGauge(
                          currentValue = currentSpeed,
                          maxValue = 100.0,
-                         isConnected = testState !is FastSpeedTestManager.TestState.Error,
-                         modifier = Modifier.fillMaxSize()
+                         gaugeColor = gaugeColor,
+                         modifier = Modifier.fillMaxSize().padding(bottom = 20.dp) // Lift gauge slightly
                      )
                      
-                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                     Column(
+                         horizontalAlignment = Alignment.CenterHorizontally,
+                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)
+                     ) {
                          Text(
                             text = "%.0f".format(currentSpeed),
-                            fontSize = 48.sp, // Reduced Font
+                            fontSize = 40.sp, 
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                          )
@@ -246,14 +261,6 @@ fun SpeedTestScreen(
                              style = MaterialTheme.typography.titleMedium, 
                              color = MaterialTheme.colorScheme.onSurfaceVariant
                          )
-                         
-                         Spacer(modifier = Modifier.height(4.dp))
-                         
-                         if (testState is FastSpeedTestManager.TestState.Error) {
-                             Text("Offline", color = Color(0xFFF44336), style = MaterialTheme.typography.labelMedium)
-                         } else {
-                             Text("Connected", color = Color(0xFF4CAF50), style = MaterialTheme.typography.labelMedium)
-                         }
                      }
                  }
             }
