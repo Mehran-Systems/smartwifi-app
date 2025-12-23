@@ -8,11 +8,13 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    private val repository: SmartWifiRepository
+    private val repository: SmartWifiRepository,
+    private val signalSensor: com.smartwifi.logic.SignalDirectionSensor
 ) : ViewModel() {
 
     val uiState: StateFlow<AppUiState> = repository.uiState
@@ -21,6 +23,28 @@ class DashboardViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = AppUiState()
         )
+
+    // Combining flows or exposing separately. For speed, exposing flow for UI to combine.
+    val compassHeading = signalSensor.azimuth
+    val targetBearing = signalSensor.targetBearing
+
+    init {
+        // We should ideally control this based on lifecycle,
+        // but for this demo context we start on init.
+        signalSensor.startListening()
+
+        viewModelScope.launch {
+            repository.uiState.collect { state ->
+                // Pass RSSI to sensor
+                signalSensor.onRssiUpdate(state.signalStrength)
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        signalSensor.stopListening()
+    }
 
     fun setSensitivity(value: Int) {
         repository.setSensitivity(value)

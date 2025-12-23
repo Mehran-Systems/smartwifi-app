@@ -59,7 +59,9 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable("speed_test") {
-                             SpeedTestScreen(onBack = { navController.popBackStack() })
+                             SpeedTestScreen(
+                                onBackClick = { navController.popBackStack() }
+                            )
                         }
                         composable("network_list") {
                             NetworkListScreen(
