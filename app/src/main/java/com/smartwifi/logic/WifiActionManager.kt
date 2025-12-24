@@ -110,4 +110,14 @@ class WifiActionManager @Inject constructor(
         @Suppress("DEPRECATION")
         return wifiManager.scanResults
     }
+
+    fun getSavedNetworks(): List<android.net.wifi.WifiConfiguration> {
+        try {
+            @Suppress("DEPRECATION")
+            return wifiManager.configuredNetworks ?: emptyList() 
+        } catch (e: SecurityException) {
+            Log.e("WifiActionManager", "Permission denied for saved networks", e)
+            return emptyList()
+        }
+    }
 }

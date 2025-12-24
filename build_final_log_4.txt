@@ -1,0 +1,108 @@
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:processDebugNavigationResources UP-TO-DATE
+> Task :app:compileDebugNavigationResources UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+
+> Task :app:processDebugMainManifest
+D:\Projects\smartwifi-app\app\src\main\AndroidManifest.xml:14:5-87 Warning:
+	Element uses-permission#android.permission.FOREGROUND_SERVICE_DATA_SYNC at AndroidManifest.xml:14:5-87 duplicated with element declared at AndroidManifest.xml:13:5-87
+
+> Task :app:processDebugManifest
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugNativeLibs NO-SOURCE
+> Task :app:stripDebugDebugSymbols NO-SOURCE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :app:processDebugManifestForPackage
+> Task :app:processDebugResources
+> Task :app:kaptGenerateStubsDebugKotlin
+> Task :app:kaptDebugKotlin
+
+> Task :app:compileDebugKotlin
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:20:28 'getter for connectionInfo: WifiInfo!' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:25:32 'getter for connectionInfo: WifiInfo!' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:32:21 'disconnect(): Boolean' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:68:18 'SSID: String!' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:69:18 'BSSID: String!' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:70:18 'status: Int' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:70:44 'WifiConfiguration' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:70:62 'Status' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:70:69 'ENABLED: Int' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:72:37 'addNetwork(WifiConfiguration!): Int' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:74:29 'disconnect(): Boolean' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:75:29 'enableNetwork(Int, Boolean): Boolean' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:76:29 'reconnect(): Boolean' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:97:34 'disconnect(): Boolean' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:101:34 'disconnect(): Boolean' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:102:34 'reconnect(): Boolean' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/logic/WifiActionManager.kt:114:51 'WifiConfiguration' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/service/SmartWifiService.kt:273:42 'SSID: String!' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/service/SmartWifiService.kt:302:31 The value '999' assigned to 'var bestScore: Int defined in com.smartwifi.service.SmartWifiService.performSmartChecks' is never used
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/service/SmartWifiService.kt:319:94 'SSID: String!' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/service/SmartWifiService.kt:320:81 'SSID: String!' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/service/SmartWifiService.kt:323:71 'SSID: String!' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/service/SmartWifiService.kt:342:36 'SSID: String!' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/service/SmartWifiService.kt:345:30 'SSID: String!' is deprecated. Deprecated in Java
+
+> Task :app:compileDebugJavaWithJavac
+Java compiler version 21 has deprecated support for compiling with source/target version 8.
+Try one of the following options:
+    1. [Recommended] Use Java toolchain with a lower language version
+    2. Set a higher source/target version
+    3. Use a lower version of the JDK running the build (if you're not using Java toolchain)
+For more details on how to configure these settings, see https://developer.android.com/build/jdks.
+To suppress this warning, set android.javaCompile.suppressSourceTargetDeprecationWarning=true in gradle.properties.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+
+> Task :app:hiltAggregateDepsDebug UP-TO-DATE
+
+> Task :app:hiltJavaCompileDebug
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+
+> Task :app:processDebugJavaRes
+> Task :app:mergeDebugJavaResource UP-TO-DATE
+> Task :app:transformDebugClassesWithAsm
+> Task :app:dexBuilderDebug
+> Task :app:mergeProjectDexDebug
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect
+> Task :app:assembleDebug
+
+[Incubating] Problems report is available at: file:///D:/Projects/smartwifi-app/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.13/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 15s
+41 actionable tasks: 16 executed, 25 up-to-date

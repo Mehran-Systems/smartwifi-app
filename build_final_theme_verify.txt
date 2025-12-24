@@ -1,0 +1,92 @@
+Starting a Gradle Daemon, 1 incompatible and 2 stopped Daemons could not be reused, use --status for details
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:processDebugNavigationResources UP-TO-DATE
+> Task :app:compileDebugNavigationResources UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+
+> Task :app:processDebugMainManifest
+D:\Projects\smartwifi-app\app\src\main\AndroidManifest.xml:14:5-87 Warning:
+	Element uses-permission#android.permission.FOREGROUND_SERVICE_DATA_SYNC at AndroidManifest.xml:14:5-87 duplicated with element declared at AndroidManifest.xml:13:5-87
+
+> Task :app:processDebugManifest
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugNativeLibs NO-SOURCE
+> Task :app:stripDebugDebugSymbols NO-SOURCE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:processDebugManifestForPackage
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :app:processDebugResources
+> Task :app:kaptGenerateStubsDebugKotlin
+> Task :app:kaptDebugKotlin
+
+> Task :app:compileDebugKotlin
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/ui/SettingsScreen.kt:37:9 'SmallTopAppBar(() -> Unit, Modifier = ..., () -> Unit = ..., RowScope.() -> Unit = ..., WindowInsets = ..., TopAppBarColors = ..., TopAppBarScrollBehavior? = ...): Unit' is deprecated. Use TopAppBar instead.
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/ui/components/ThemeSelectionDialog.kt:54:55 Destructured parameter 'label' is never used
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/ui/DashboardScreen.kt:48:9 Variable 'radarScale' is never used
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/ui/DashboardScreen.kt:84:21 Variable 'relativePull' is never used
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/ui/DashboardScreen.kt:400:46 'calculateSignalLevel(Int, Int): Int' is deprecated. Deprecated in Java
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/ui/NetworkListScreen.kt:37:9 'SmallTopAppBar(() -> Unit, Modifier = ..., () -> Unit = ..., RowScope.() -> Unit = ..., WindowInsets = ..., TopAppBarColors = ..., TopAppBarScrollBehavior? = ...): Unit' is deprecated. Use TopAppBar instead.
+w: file:///D:/Projects/smartwifi-app/app/src/main/java/com/smartwifi/ui/WifiAnalyzerScreen.kt:36:13 'SmallTopAppBar(() -> Unit, Modifier = ..., () -> Unit = ..., RowScope.() -> Unit = ..., WindowInsets = ..., TopAppBarColors = ..., TopAppBarScrollBehavior? = ...): Unit' is deprecated. Use TopAppBar instead.
+
+> Task :app:compileDebugJavaWithJavac
+Java compiler version 21 has deprecated support for compiling with source/target version 8.
+Try one of the following options:
+    1. [Recommended] Use Java toolchain with a lower language version
+    2. Set a higher source/target version
+    3. Use a lower version of the JDK running the build (if you're not using Java toolchain)
+For more details on how to configure these settings, see https://developer.android.com/build/jdks.
+To suppress this warning, set android.javaCompile.suppressSourceTargetDeprecationWarning=true in gradle.properties.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+
+> Task :app:hiltAggregateDepsDebug UP-TO-DATE
+
+> Task :app:hiltJavaCompileDebug
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+
+> Task :app:processDebugJavaRes
+> Task :app:transformDebugClassesWithAsm
+> Task :app:mergeDebugJavaResource
+> Task :app:dexBuilderDebug
+> Task :app:mergeProjectDexDebug
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect
+> Task :app:assembleDebug
+
+[Incubating] Problems report is available at: file:///D:/Projects/smartwifi-app/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.13/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 1m 14s
+41 actionable tasks: 17 executed, 24 up-to-date

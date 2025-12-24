@@ -7,6 +7,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,11 +22,12 @@ import androidx.compose.ui.platform.LocalContext
 @Composable
 fun SettingsScreen(
     onBackClick: () -> Unit,
-    onNetworkManagerClick: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    var showResetDialog by remember { mutableStateOf(false) }
+    var showThemeDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -50,6 +52,46 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .fillMaxSize()
         ) {
+            
+            Text("Appearance", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            SettingsCard(title = "Appearance") {
+                val map = mapOf("SYSTEM" to "System", "LIGHT" to "Light", "DARK" to "Dark")
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    map.forEach { (mode, label) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = uiState.themeMode == mode,
+                                onClick = { viewModel.setThemeMode(mode) }
+                            )
+                            Text(text = label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedButton(
+                    onClick = { showThemeDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Customize Theme Colors")
+                }
+            }
+            
+            if (showThemeDialog) {
+                com.smartwifi.ui.components.ThemeSelectionDialog(
+                    currentBackground = uiState.themeBackground,
+                    currentAccent = uiState.themeAccent,
+                    onDismiss = { showThemeDialog = false },
+                    onConfirm = { bg, accent ->
+                        viewModel.setThemeColors(bg, accent)
+                        showThemeDialog = false
+                    }
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
             
             Text("The Brain Configuration", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(16.dp))
@@ -201,14 +243,40 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Link to Network Manager
+            // Restore Defaults Option
             OutlinedButton(
-                onClick = onNetworkManagerClick,
-                modifier = Modifier.fillMaxWidth()
+                onClick = { showResetDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
-                Icon(Icons.Default.List, contentDescription = null)
+                Icon(Icons.Default.Refresh, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Manage Saved Networks")
+                Text("Restore Default Settings")
+            }
+            
+            if (showResetDialog) {
+                AlertDialog(
+                    onDismissRequest = { showResetDialog = false },
+                    title = { Text("Restore Defaults?") },
+                    text = { Text("This will reset all sensitivity and threshold settings to their original factory values. This action cannot be undone.") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                viewModel.resetSettings()
+                                showResetDialog = false
+                                Toast.makeText(context, "Settings restored to defaults", Toast.LENGTH_SHORT).show()
+                            },
+                             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Restore")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showResetDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
         }
     }

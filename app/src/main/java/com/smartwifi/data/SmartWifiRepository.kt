@@ -60,8 +60,8 @@ class SmartWifiRepository @Inject constructor() {
         _uiState.update { it.copy(probationList = list) }
     }
 
-    fun updateSavedNetworks(list: List<com.smartwifi.data.model.SavedNetworkItem>) {
-        _uiState.update { it.copy(savedNetworks = list) }
+    fun updateAvailableNetworks(list: List<com.smartwifi.data.model.AvailableNetworkItem>) {
+        _uiState.update { it.copy(availableNetworks = list) }
     }
 
     fun updateLinkSpeed(speed: Int) {
@@ -103,5 +103,38 @@ class SmartWifiRepository @Inject constructor() {
 
     fun setFiveGhzThreshold(value: Int) {
         _uiState.update { it.copy(fiveGhzThreshold = value) }
+    }
+
+    fun setThemeMode(mode: String) {
+        _uiState.update { it.copy(themeMode = mode) }
+    }
+
+    fun setThemeColors(background: Long, accent: Long) {
+        _uiState.update {
+            it.copy(
+                themeBackground = background,
+                themeAccent = accent
+            )
+        }
+    }
+
+    fun resetToDefaults() {
+        val defaults = AppUiState() // Fresh defaults
+        _uiState.update { current ->
+            current.copy(
+                sensitivity = defaults.sensitivity,
+                mobileDataThreshold = defaults.mobileDataThreshold,
+                minSignalDiff = defaults.minSignalDiff,
+                isGamingMode = defaults.isGamingMode,
+                isDataFallback = defaults.isDataFallback,
+                isGeofencingEnabled = defaults.isGeofencingEnabled,
+                is5GhzPriorityEnabled = defaults.is5GhzPriorityEnabled,
+                fiveGhzThreshold = defaults.fiveGhzThreshold,
+                isHotspotSwitchingEnabled = defaults.isHotspotSwitchingEnabled,
+                themeMode = defaults.themeMode, // Reset theme mode
+                themeBackground = defaults.themeBackground, // Reset colors
+                themeAccent = defaults.themeAccent
+            )
+        }
     }
 }

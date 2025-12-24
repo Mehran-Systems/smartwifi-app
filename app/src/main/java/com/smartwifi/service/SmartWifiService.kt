@@ -13,8 +13,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.*
 import com.smartwifi.logic.*
 
-// Stub for demo counting
-object BrainStub { var demoCounter = 0 }
+
 
 @AndroidEntryPoint
 class SmartWifiService : Service() {
@@ -31,6 +30,7 @@ class SmartWifiService : Service() {
 
     private val serviceJob = Job()
     private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
+    private var dataFallbackJob: Job? = null // For 10s Persistence Timer
     
     // Instant Update Callback
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
@@ -48,6 +48,16 @@ class SmartWifiService : Service() {
              Log.d("SmartWifiService", "NetworkCallback: Lost")
              serviceScope.launch {
                 performSmartChecks()
+            }
+        }
+        
+        override fun onCapabilitiesChanged(network: Network, networkCapabilities: android.net.NetworkCapabilities) {
+            super.onCapabilitiesChanged(network, networkCapabilities)
+            // Trigger check for Metered/Unmetered changes or ZOMBIE validation
+            val isValidated = networkCapabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            if (!isValidated) {
+                 Log.w("SmartWifiService", "Network Capability: Not Validated (Potential Zombie)")
+                 serviceScope.launch { performSmartChecks() }
             }
         }
     }
@@ -152,130 +162,169 @@ class SmartWifiService : Service() {
         val rssi = signalMonitor.getRssi()
         val freq = signalMonitor.getFrequency()
         val band = if (freq > 4900) "5GHz" else "2.4GHz"
+        val isWifiMetered = signalMonitor.isMeteredNetwork()
+        val isWifiEnabled = signalMonitor.isWifiEnabled()
         
         val currentBssid = actionManager.getConnectedBssid()
         val rawSsid = actionManager.getConnectedSsid()
+        val quoteFreeSsid = rawSsid?.replace("\"", "") ?: "Unknown"
 
-        // 0.5. Check if WiFi is actually enabled
-        if (!signalMonitor.isWifiEnabled()) {
-             // WiFi is OFF.
-             val isManualFallback = repository.uiState.value.isDataFallback
-             if (!isManualFallback) {
-                 repository.updateNetworkInfo("Disconnected", -127, "-")
-                 repository.updateConnectionSource(com.smartwifi.data.model.ConnectionSource.WIFI_ROUTER) 
-             }
-        } 
-        
-        // 5GHz Priority Check
-        if (repository.uiState.value.is5GhzPriorityEnabled && band == "2.4GHz" && !brain.shouldEnterProbation(rssi, hasInternet)) {
-             // Only switch if current signal is usable but we want faster. 
-             // Don't switch if we are already in probation/zombie mode (handled elsewhere)
-             
-             // 1. Trigger Scan (Async)
-             actionManager.startScan()
-             
-             // 2. Check existing results (might be fresh enough)
-             val results = actionManager.getScanResults()
-             val currentSsidQuoteFree = rawSsid?.replace("\"", "") ?: ""
-             
-             if (currentSsidQuoteFree.isNotEmpty()) {
-                 Log.d("SmartWifiService", "5GHz Check: Scanning... Found ${results.size} networks. Current: $currentSsidQuoteFree")
-                 
-                 // Find 5GHz version of SAME SSID or "5G" variant
-                 val betterNetwork = results.firstOrNull { 
-                    val scanSsid = it.SSID.replace("\"", "")
-                
-                // Smart Match: Normalize both SSIDs to their "Base Name"
-                // e.g. "HomeWifi-5G" -> "HomeWifi", "HomeWifi" -> "HomeWifi"
-                fun normalize(name: String): String {
-                    return name.replace(Regex("(?i)[-_ ]?(5g|5ghz|2\\.4g|2\\.4ghz)"), "")
-                }
-                
-                val currentBase = normalize(currentSsidQuoteFree)
-                val scanBase = normalize(scanSsid)
-                
-                val namesMatch = currentBase.equals(scanBase, ignoreCase = true)
-                
-                // STRICT ATTRIBUTE CHECK: Trust Hardware Frequency, Not Name
-                val isTrue5Ghz = it.frequency > 4900 
-                val threshold = repository.uiState.value.fiveGhzThreshold
-                val isStrong = it.level > threshold
-                
-                if (namesMatch && isTrue5Ghz) {
-                     Log.v("SmartWifiService", "Candidate found via Attribute Check: $scanSsid (${it.frequency}MHz) Match=$namesMatch. Level: ${it.level} > $threshold?")
-                }
-                
-                namesMatch && isTrue5Ghz && isStrong
-                 }
-                 
-                 if (betterNetwork != null) {
-                     Log.i("SmartWifiService", "Found Better 5GHz Network: ${betterNetwork.SSID} (${betterNetwork.BSSID}). Switching...")
-                     repository.updateLastAction("Switching to 5GHz: ${betterNetwork.SSID}")
-                     actionManager.connectTo5GhzNetwork(currentSsidQuoteFree, betterNetwork.BSSID)
-                 } else {
-                     Log.d("SmartWifiService", "No better 5GHz network found for $currentSsidQuoteFree (Scanned ${results.size})")
-                 }
-             } else {
-                 Log.w("SmartWifiService", "Skipping 5GHz check: Current SSID unknown")
-             }
-        }
-        
-        // Logic: Valid WiFi Connection
-        if (signalMonitor.isWifiEnabled() && rawSsid != null && rawSsid != "Unknown" && rawSsid != "<unknown ssid>") {
-             if (repository.uiState.value.isDataFallback) {
-                 repository.updateConnectionSource(com.smartwifi.data.model.ConnectionSource.WIFI_ROUTER)
-             }
+        // Update UI
+        if (isWifiEnabled && rawSsid != null && rawSsid != "Unknown" && rawSsid != "<unknown ssid>") {
              if (rawSsid != repository.uiState.value.currentSsid) {
                   repository.updateNetworkInfo(rawSsid, rssi, band)
              }
-        } else if (signalMonitor.isWifiEnabled()) { 
+        } else if (isWifiEnabled) { 
              repository.updateNetworkInfo(repository.uiState.value.currentSsid, rssi, band)
         }
 
         val internetStatusStr = if (hasInternet) "Connected" else "No Internet"
         repository.updateInternetStatus(internetStatusStr)
         
-        // Scenario C: Data Fallback
-        if ((!hasInternet || !signalMonitor.isWifiEnabled()) && repository.uiState.value.isDataFallback) {
-             repository.updateActiveMode("Mobile Data Fallback")
-             repository.updateConnectionSource(com.smartwifi.data.model.ConnectionSource.MOBILE_DATA)
-             
-             val carrier = mobileMonitor.getCarrierName()
-             val networkType = mobileMonitor.getNetworkType()
-             val signal = mobileMonitor.getSignalStrength() 
-             repository.updateNetworkInfo(carrier, signal, networkType)
-             repository.updateTrafficStats(0, repository.uiState.value.currentUsage) 
-        } else {
-             if (signalMonitor.isWifiEnabled() && hasInternet) {
-                  repository.updateActiveMode("Stationary (Home/Office)")
-             }
-        }
+        // --- LOGIC 1: ZOMBIE & PROBATION ---
         
-        // Brain Logic Execution (Zombie Check)
-        val currentSsid = repository.uiState.value.currentSsid
-        if (currentBssid != null && brain.isUnderProbation(currentBssid)) {
-            repository.updateLastAction("Disconnecting Zombie: $currentSsid")
-            repository.setZombieDetected(true)
-            actionManager.disconnectNetwork() 
+        // Check if current network is a Zombie
+        if (currentBssid != null && brain.isZombieConnection(hasInternet) && isWifiEnabled) {
+             Log.i("SmartWifiService", "Zombie Detected on $quoteFreeSsid. Disconnecting.")
+             repository.updateLastAction("Zombie Detected: $quoteFreeSsid")
+             repository.setZombieDetected(true)
+             brain.addToProbation(currentBssid)
+             actionManager.disconnectNetwork()
+             return // Acted, return to loop
         } else {
             repository.setZombieDetected(false)
         }
 
-        // 3. Scenario B: Travel Mode (Zombie Detection)
-        // Note: 'else if' removed to allow independent checks if needed, but logic flow suggests priority
-        if (!brain.shouldTriggerDataFallback(rssi, hasInternet) && brain.shouldEnterProbation(rssi, hasInternet)) {
-            Log.i("SmartWifiService", "Scenario B: Zombie Hotspot detection. Entering Probation.")
-            repository.updateLastAction("Zombie Detected: Entering Probation")
-            repository.setZombieDetected(true)
-            // If it was a hotspot, we might want to flag it here, but broadly it's a wifi issue
-            currentBssid?.let { 
-                brain.addToProbation(it) 
-                actionManager.disconnectNetwork()
+        // --- LOGIC 2: MOBILE DATA FALLBACK (PERSISTENCE) ---
+        
+        // Condition: No Internet OR (WifiEnabled but Weak/Unusable)
+        // Condition: No Internet OR (WifiEnabled but Weak/Unusable)
+        // Sensitivity Mapping: 0 -> -90 (Keep), 100 -> -50 (Drop)
+        val sensitivityDbm = -90 + (repository.uiState.value.sensitivity * 0.4).toInt()
+        
+        val linkSpeed = signalMonitor.getLinkSpeed()
+        val speedThreshold = repository.uiState.value.mobileDataThreshold
+        val isSlow = isWifiEnabled && linkSpeed < speedThreshold && linkSpeed > 0
+        
+        val shouldFallback = !hasInternet || (isWifiEnabled && rssi < sensitivityDbm) || isSlow
+        
+        if (shouldFallback && repository.uiState.value.isDataFallback) {
+             if (dataFallbackJob == null) {
+                 Log.i("SmartWifiService", "Instability Detected. Starting 10s Persistence Timer...")
+                 repository.updateLastAction("Unstable WiFi. Timer Started...")
+                 
+                 dataFallbackJob = serviceScope.launch {
+                     delay(10000) // 10 seconds persistence
+                     // Check again
+                     if (!internetChecker.hasInternetAccess()) {
+                         Log.i("SmartWifiService", "Persistence Failed. Triggering Data Fallback.")
+                         repository.updateActiveMode("Mobile Data Fallback")
+                         repository.updateConnectionSource(com.smartwifi.data.model.ConnectionSource.MOBILE_DATA)
+                         
+                         val carrier = mobileMonitor.getCarrierName()
+                         val type = mobileMonitor.getNetworkType()
+                         repository.updateNetworkInfo(carrier, mobileMonitor.getSignalStrength(), type)
+                         // Potentially disconnect WiFi to force cellular if needed, or just update UI and let OS handle request
+                         // Note: Android usually auto-switches if we validate "No Internet".
+                         // Explicit disconnect:
+                         if (signalMonitor.isWifiEnabled()) actionManager.disconnectNetwork()
+                     } else {
+                         Log.i("SmartWifiService", "Signal Recovered during timer.")
+                         repository.updateLastAction("Signal Recovered.")
+                     }
+                     dataFallbackJob = null
+                 }
+             }
+        } else {
+             // Recovered or Stable
+             if (dataFallbackJob != null) {
+                 Log.i("SmartWifiService", "Stabilized. Cancelling Timer.")
+                 dataFallbackJob?.cancel()
+                 dataFallbackJob = null
+             }
+             
+             if (isWifiEnabled && hasInternet && currentBssid != null) {
+                  repository.updateActiveMode(if (isWifiMetered) "WiFi (Hotspot)" else "Stationary (Fixed WiFi)")
+                  repository.updateConnectionSource(com.smartwifi.data.model.ConnectionSource.WIFI_ROUTER)
+             }
+        }
+        
+        // --- LOGIC 3: INTELLIGENT SCAN & 5GHz SWITCH ---
+        
+        // Trigger only if we have a connection to optimize
+        if (isWifiEnabled && hasInternet && currentBssid != null && dataFallbackJob == null) {
+        
+            val shouldScanFor5G = repository.uiState.value.is5GhzPriorityEnabled && band == "2.4GHz"
+            val shouldScanForBetterOverall = true // Always look for better fixed wifi
+            
+            if (shouldScanFor5G || shouldScanForBetterOverall) {
+                actionManager.startScan()
+                val results = actionManager.getScanResults()
+                
+                val currentBase = brain.normalizeSsid(quoteFreeSsid)
+                val currentScore = brain.calculateDesirabilityScore(rssi, isWifiMetered, band == "5GHz")
+                
+                // Find candidates
+                var bestCandidate: android.net.wifi.ScanResult? = null
+                var bestScore = -1
+                
+                for (scan in results) {
+                     val scanSsid = scan.SSID.replace("\"", "")
+                     if (scanSsid.isEmpty()) continue
+                     
+                     // Skip if same BSSID (already connected)
+                     if (scan.BSSID == currentBssid) continue
+                     
+                     // Skip if under probation
+                     if (brain.isUnderProbation(scan.BSSID)) continue
+                     
+                     // 1. Normalization Match (for 5GHz upgrade)
+                     val scanBase = brain.normalizeSsid(scanSsid)
+                     val isSameFamily = currentBase.equals(scanBase, ignoreCase = true)
+                     
+                     // 2. Identify Metadata
+                     val isTrue5Ghz = scan.frequency > 4900
+                     // Heuristic: If same family, inherit metered status. Else assume Fixed (optimistic) or check OUI (too complex).
+                     // Requirement implies "Intelligent Candidate Scoring" - let's assume Unmetered unless we know otherwise?
+                     // Or strictly penalize unknown hotspots? 
+                     // For now: If Same Family, use current status. If different, assume Fixed (Standard WiFi).
+                     val candidateIsMetered = if (isSameFamily) isWifiMetered else false 
+                     
+                     // 5GHz Auto-Switching Logic (Specific)
+                     if (shouldScanFor5G && isSameFamily && isTrue5Ghz) {
+                          // Check Threshold
+                          if (scan.level > repository.uiState.value.fiveGhzThreshold) {
+                              // Found 5GHz upgrade!
+                              Log.i("SmartWifiService", "5GHz Upgrade Found: $scanSsid")
+                              bestCandidate = scan
+                              // Boost score to ensure switch
+                              bestScore = 999 
+                              break // Take it immediately
+                          }
+                     }
+                     
+                     // General "Better Network" Scoring
+                     val candidateScore = brain.calculateDesirabilityScore(scan.level, candidateIsMetered, isTrue5Ghz)
+                     
+                     if (brain.shouldSwitchNetwork(rssi, isWifiMetered, scan.level, candidateIsMetered)) {
+                          if (candidateScore > bestScore && candidateScore > currentScore) {
+                              bestCandidate = scan
+                              bestScore = candidateScore
+                          }
+                     }
+                }
+                
+                if (bestCandidate != null) {
+                     Log.i("SmartWifiService", "Switching to Better Network: ${bestCandidate.SSID}")
+                     repository.updateLastAction("Switching to: ${bestCandidate.SSID}")
+                     
+                     // Use suggestion API
+                     actionManager.connectTo5GhzNetwork(bestCandidate.SSID.replace("\"", ""), bestCandidate.BSSID)
+                }
             }
         }
 
         // --- Update UI Lists ---
-        // Probation List
         val probationMap = brain.getProbationList()
         val now = System.currentTimeMillis()
         val probationUiList = probationMap.map { entry ->
@@ -284,40 +333,42 @@ class SmartWifiService : Service() {
         }
         repository.updateProbationList(probationUiList)
 
-        // Saved Networks (Mock for Demo/UI.txt)
-        val mockSaved = listOf(
-            com.smartwifi.data.model.SavedNetworkItem("Office_Floor2", -55, true),
-            com.smartwifi.data.model.SavedNetworkItem("Home_Wifi_5G", -72, true),
-            com.smartwifi.data.model.SavedNetworkItem("Starbucks_Public", -85, false)
-        )
-        repository.updateSavedNetworks(mockSaved)
+        // Real Available Networks (Scan Results)
+        // Detailed "Wifi Analyzer" style list showing individual BSSIDs
+        val scanResults = actionManager.getScanResults()
+        
+        val availableUiList = scanResults
+            .filter { it.SSID != null && it.SSID.isNotEmpty() }
+            // We want ALL BSSIDs (Physical APs), not just unique SSIDs
+            .map { scan -> 
+                val isConnected = scan.BSSID == currentBssid
+                
+                // Map Channel Width
+                val width = when (scan.channelWidth) {
+                    android.net.wifi.ScanResult.CHANNEL_WIDTH_20MHZ -> 20
+                    android.net.wifi.ScanResult.CHANNEL_WIDTH_40MHZ -> 40
+                    android.net.wifi.ScanResult.CHANNEL_WIDTH_80MHZ -> 80
+                    android.net.wifi.ScanResult.CHANNEL_WIDTH_160MHZ -> 160
+                    else -> 20
+                }
+                
+                com.smartwifi.data.model.AvailableNetworkItem(
+                    ssid = scan.SSID.replace("\"", ""),
+                    bssid = scan.BSSID,
+                    level = scan.level,
+                    frequency = scan.frequency,
+                    capabilities = scan.capabilities,
+                    channelWidth = width,
+                    isConnected = isConnected
+                )
+            }
+            .sortedByDescending { it.level }
+            .take(50)
+        
+        repository.updateAvailableNetworks(availableUiList)
+        
 
-        // 4. Scenario A: Stationary Mode (Sticky Client)
-        // Demo Logic: Simulate finding a better network occasionally if we are on "Home_Wifi_5G"
-        // In real app, this would use ScanResults and minSignalDiff from settings
-        if (currentSsid == "Home_Wifi_5G" && rssi < -70 && brain.shouldTriggerDataFallback(rssi, hasInternet) == false) {
-             // Auto-Switch Logic (No Dialog)
-             Log.i("SmartWifiService", "Auto-Switching to better network: Office_Floor2")
-             repository.updateLastAction("Auto-Switching to Office_Floor2")
-             // Simulate connection success
-             repository.updateNetworkInfo("Office_Floor2", -55, "5GHz")
-        } else if (currentSsid == "Office_Floor2" && rssi < -75) {
-             // Simulate attempting to switch to a Hotspot (Starbucks_Public)
-             if (repository.uiState.value.isHotspotSwitchingEnabled) {
-                 Log.i("SmartWifiService", "Switching to Hotspot: Starbucks_Public")
-                 repository.updateNetworkInfo("Starbucks_Public", -60, "2.4GHz")
-                 repository.updateConnectionSource(com.smartwifi.data.model.ConnectionSource.WIFI_HOTSPOT)
-             } else {
-                 Log.i("SmartWifiService", "Skipping Hotspot (Starbucks_Public) due to user setting.")
-                 repository.updateLastAction("Skipped Hotspot: Starbucks_Public")
-             }
-        if (currentSsid == "Unknown" && BrainStub.demoCounter == 2) {
-             // Force connection for demo
-             Log.i("SmartWifiService", "Auto-Connecting to Home_Wifi_5G")
-             repository.updateNetworkInfo("Home_Wifi_5G", -65, "5GHz")
-        }
-        BrainStub.demoCounter++
-    }}
+    }
 
 
     override fun onBind(intent: Intent?): IBinder? {

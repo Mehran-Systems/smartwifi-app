@@ -98,4 +98,16 @@ class DashboardViewModel @Inject constructor(
     fun setFiveGhzThreshold(value: Int) {
         repository.setFiveGhzThreshold(value)
     }
+
+    fun setThemeMode(mode: String) {
+        repository.setThemeMode(mode)
+    }
+
+    fun setThemeColors(background: Long, accent: Long) {
+        repository.setThemeColors(background, accent)
+    }
+
+    fun resetSettings() {
+        repository.resetToDefaults()
+    }
 }

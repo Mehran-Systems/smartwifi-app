@@ -10,27 +10,44 @@ The app prioritizes actual internet connectivity over just "being connected to W
 ## 2. 5GHz Auto-Switching (Priority Mode)
 **Goal**: Automatically upgrade the user from a 2.4GHz connection to a faster 5GHz connection if available and stable.
 
-### A. Candidate Selection (Smart Matching)
-The app scans available networks and looks for a "Better Version" of the current connection. It manages inconsistent naming (Mesh vs. Split bands) using **Smart Normalization**:
+### A. Smart Normalization
+The app manages inconsistent naming (Mesh vs. Split bands) using **Smart Normalization**:
 1.  **Normalization**: It strips generic suffixes like `-5G`, `_5GHz`, `2.4G`, ` 5GHz` from both the current SSID and scanned SSIDs.
-    *   *Example*: "HomeWifi-2.4G" (Current) and "HomeWifi-5G" (Scanned) both normalize to "HomeWifi".
+    *   *Example*: "HomeWifi-2.4G" (Current) and "HomeWifi-5G" (Scanned) normalize to "HomeWifi".
     *   *Result*: They are identified as the *same* network family.
 2.  **Hardware Verification**: It ignores the name for band verification and checks the physical frequency:
     *   Must be `> 4900 MHz` (True 5GHz).
     *   This prevents "Fake 5G" names on 2.4GHz hardware from fooling the app.
 
 ### B. Signal Threshold
-*   **Configurable**: The switch only happens if the 5GHz signal is stronger than the configured threshold (Default: **-75 dBm**).
-*   **Logic**: 5GHz is faster but has shorter range. We only switch if the 5GHz signal is usable.
+*   **Logic**: The switch only happens if the 5GHz signal is stronger than the configured threshold (Default: **-75 dBm**).
 
 ### C. The Switch Mechanism (Android 10+)
 *   **API**: Uses `WifiNetworkSuggestion`.
-*   **Action**: The app registers the 5GHz network as a "High Priority (1000)" suggestion with the Android OS.
-*   **Trigger**: It flags `setIsAppInteractionRequired(true)`, telling Android this is an explicit user preference, forcing the OS to evaluate the switch immediately.
+*   **Action**: Registers the 5GHz network as a "High Priority (1000)" suggestion.
+*   **Trigger**: Flags `setIsAppInteractionRequired(true)` to force OS evaluation.
 
 ---
 
-## 3. Zombie Connection Detection
+## 3. Intelligent Candidate Scoring (NEW: Hotspot vs. Fixed Logic)
+**Goal**: Prioritize Fixed Broadband (Office/Home WiFi) over Mobile Hotspots to save team data and battery during travel, unless the Fixed WiFi is unusable.
+
+### Logic
+The app assigns a "Desirability Score" to every available network found during a scan.
+
+1.  **Identification**: The app checks the Android NetworkCapabilities flag `NET_CAPABILITY_NOT_METERED`.
+    *   **Unmetered**: Assumed Fixed WiFi (High Priority).
+    *   **Metered**: Assumed Mobile Hotspot (Lower Priority).
+
+2.  **The Penalty Rule**:
+    *   If **Network A** is Fixed WiFi and **Network B** is a Hotspot:
+    *   Network B is only selected if its signal is **> 15 dBm stronger** than Network A.
+    *   *Scenario*: If Office WiFi is -80dBm (Weak) and Team Hotspot is -50dBm (Strong), the app will switch to the Hotspot.
+    *   *Scenario*: If Office WiFi is -70dBm (Okay) and Team Hotspot is -60dBm (Good), the app stays on Office WiFi to save the Hotspot's resources.
+
+---
+
+## 4. Zombie Connection Detection
 **Goal**: Detect when WiFi is connected but has no internet access.
 
 ### Logic
@@ -39,11 +56,11 @@ The app scans available networks and looks for a "Better Version" of the current
 3.  **Result**:
     *   **Success**: Remain connected.
     *   **Failure**: Mark network as "Zombie".
-    *   **Action**: Disconnect WiFi or force Mobile Data fallback to restore internet access.
+    *   **Action**: Disconnect WiFi or force Mobile Data fallback.
 
 ---
 
-## 4. Signal Sensitivity & Roaming
+## 5. Signal Sensitivity & Roaming
 **Goal**: Prevent "Sticky WiFi" (holding onto a weak signal when a better one is close).
 
 ### Logic
@@ -53,8 +70,8 @@ The app scans available networks and looks for a "Better Version" of the current
 
 ---
 
-## 5. Probation System
-**Goal**: Prevent infinite loop switching (Connect -> No Internet -> Disconnect -> Auto-Connect -> No Internet).
+## 6. Probation System
+**Goal**: Prevent infinite loop switching.
 
 ### Logic
 *   If a specific BSSID (Router Access Point) fails the "Zombie Check" multiple times, it is added to a **Probation List**.
@@ -62,6 +79,25 @@ The app scans available networks and looks for a "Better Version" of the current
 
 ---
 
-## 6. Mobile Data Fallback
-*   If WiFi is usable but slow (below `MobileDataThreshold` speed), and "Data Fallback" is enabled:
-*   The app advises the user (or automates via Overlay if permitted) to switch to Mobile Data for better performance.
+## 7. Mobile Data Fallback with Persistence (NEW: Stability Logic)
+**Goal**: Fallback to data when WiFi is slow, but prevent "flapping" (rapid switching) caused by momentary lag spikes.
+
+### Logic
+1.  **Speed Threshold**: User sets a minimum acceptable speed (e.g., 2 Mbps).
+2.  **The Persistence Timer (The New Rule)**:
+    *   If WiFi speed drops below the threshold, start a **10-Second Timer**.
+    *   **Do NOT switch immediately.**
+    *   Ping/Speed check continues once per second during this timer.
+3.  **Decision**:
+    *   If speed recovers within 10 seconds: **Cancel Timer** (Stay on WiFi).
+    *   If speed remains below threshold for full 10 seconds: **Trigger Switch**.
+4.  **Action**: Advise user or automate switch to Mobile Data.
+
+---
+
+### Chart: Logic Flow Analysis
+*Note: The priority flow is: Scan -> Identify Sibling (2.4/5G) -> Apply Hotspot Penalty -> Compare Signal -> Connect -> Validate Internet -> Monitor Stability.*
+
+### Developer Implementation Note
+*   Regarding Section 3: Use `ConnectivityManager.getNetworkCapabilities(network).hasCapability(NET_CAPABILITY_NOT_METERED)` to determine if a network is a Hotspot or Fixed.
+*   Regarding Section 7: Implement a `CountDownTimer` or `Handler.postDelayed`. Do not execute the fallback function inside the `onCapabilitiesChanged` callback immediately; wrap it in the timer to debounce momentary signal drops.
