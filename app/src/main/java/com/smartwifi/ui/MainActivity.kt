@@ -26,13 +26,17 @@ class MainActivity : ComponentActivity() {
             // Permissions granted or denied. Service will handle missing permissions gracefully (logs errors).
         }
 
-        permissionLauncher.launch(
-            arrayOf(
-                android.Manifest.permission.ACCESS_FINE_LOCATION,
-                android.Manifest.permission.POST_NOTIFICATIONS,
-                android.Manifest.permission.READ_PHONE_STATE
-            )
+        val permissionsToRequest = mutableListOf(
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.POST_NOTIFICATIONS,
+            android.Manifest.permission.READ_PHONE_STATE
         )
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            permissionsToRequest.add(android.Manifest.permission.NEARBY_WIFI_DEVICES)
+        }
+
+        permissionLauncher.launch(permissionsToRequest.toTypedArray())
         
         // Start the background service
         val serviceIntent = Intent(this, SmartWifiService::class.java)

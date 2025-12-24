@@ -122,6 +122,21 @@ fun SettingsScreen(
                         onCheckedChange = { viewModel.set5GhzPriorityEnabled(it) }
                     )
                 }
+                
+                if (uiState.is5GhzPriorityEnabled) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Min 5GHz Signal: ${uiState.fiveGhzThreshold} dBm", style = MaterialTheme.typography.bodyMedium)
+                    Slider(
+                            value = uiState.fiveGhzThreshold.toFloat(),
+                            onValueChange = { viewModel.setFiveGhzThreshold(it.toInt()) },
+                            valueRange = -90f..-50f,
+                            steps = 39 
+                    )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Weak (-90)", style = MaterialTheme.typography.labelSmall)
+                        Text("Strong (-50)", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(32.dp))

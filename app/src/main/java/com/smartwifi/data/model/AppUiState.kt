@@ -22,7 +22,8 @@ data class AppUiState(
     val sensitivity: Int = 50, // 0-100 (Mapped to dBm range in UI)
     val mobileDataThreshold: Int = 5, // Mbps
     val isGeofencingEnabled: Boolean = false,
-    val is5GhzPriorityEnabled: Boolean = false, // New Field
+    val is5GhzPriorityEnabled: Boolean = true, // Default Enabled
+    val fiveGhzThreshold: Int = -75, // Configurable Threshold (dBm)
     val minSignalDiff: Int = 10, // dB
     val isHotspotSwitchingEnabled: Boolean = true // Default to allowing hotspots
 )

@@ -77,14 +77,33 @@ class WifiActionManager @Inject constructor(
                 Log.d("WifiActionManager", "Legacy Connect Command Sent for ID: $netId")
             }
         } else {
-             // Android 10+ suggest using WifiNetworkSpecifier (Complex for this snippet)
-             // Logging limitation for now, as user likely has legacy needs or root access in concept
-             Log.w("WifiActionManager", "Android 10+ prevents direct BSSID switching without Suggestions API.")
-             // Potential fallback: Just disconnect and hope OS picks the strong 5GHz signal now that we initiated a re-evaluation
-             // connection.
-             wifiManager.disconnect() 
-             wifiManager.reconnect()
+             // Android 10+: Use WifiNetworkSuggestion API
+             Log.i("WifiActionManager", "Android 10+: Adding 5GHz Suggestion for $ssid ($targetBssid)")
+             
+             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                 val suggestion = android.net.wifi.WifiNetworkSuggestion.Builder()
+                     .setSsid(ssid)
+                     .setBssid(android.net.MacAddress.fromString(targetBssid))
+                     .setPriority(1000) // High priority
+                     .setIsAppInteractionRequired(true) // Treat as "Connect via App"
+                     .build()
+                 
+                 val suggestions = listOf(suggestion)
+                 val status = wifiManager.addNetworkSuggestions(suggestions)
+                 
+                 if (status == WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS) {
+                     Log.i("WifiActionManager", "Suggestion Added Successfully. Disconnecting to force re-eval...")
+                     // Force re-evaluation by disconnecting current
+                     wifiManager.disconnect()
+                 } else {
+                     Log.w("WifiActionManager", "Suggestion Failed: $status")
+                     // Fallback check
+                     wifiManager.disconnect()
+                     wifiManager.reconnect()
+                 }
+             }
         }
+
     }
     
     fun getScanResults(): List<android.net.wifi.ScanResult> {

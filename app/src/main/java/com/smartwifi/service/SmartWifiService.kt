@@ -178,21 +178,45 @@ class SmartWifiService : Service() {
              val results = actionManager.getScanResults()
              val currentSsidQuoteFree = rawSsid?.replace("\"", "") ?: ""
              
-             // Find 5GHz version of SAME SSID
-             val betterNetwork = results.firstOrNull { 
-                val scanSsid = it.SSID.replace("\"", "")
-                val isSameName = scanSsid == currentSsidQuoteFree
-                val is5Ghz = it.frequency > 4900
-                val isStrong = it.level > -70 // Only switch if signal is decent
-                isSameName && is5Ghz && isStrong
-             }
-             
-             if (betterNetwork != null) {
-                 Log.i("SmartWifiService", "Found Better 5GHz Network: ${betterNetwork.SSID} (${betterNetwork.BSSID}). Switching...")
-                 repository.updateLastAction("Switching to 5GHz: ${betterNetwork.SSID}")
-                 actionManager.connectTo5GhzNetwork(currentSsidQuoteFree, betterNetwork.BSSID)
+             if (currentSsidQuoteFree.isNotEmpty()) {
+                 Log.d("SmartWifiService", "5GHz Check: Scanning... Found ${results.size} networks. Current: $currentSsidQuoteFree")
+                 
+                 // Find 5GHz version of SAME SSID or "5G" variant
+                 val betterNetwork = results.firstOrNull { 
+                    val scanSsid = it.SSID.replace("\"", "")
+                
+                // Smart Match: Normalize both SSIDs to their "Base Name"
+                // e.g. "HomeWifi-5G" -> "HomeWifi", "HomeWifi" -> "HomeWifi"
+                fun normalize(name: String): String {
+                    return name.replace(Regex("(?i)[-_ ]?(5g|5ghz|2\\.4g|2\\.4ghz)"), "")
+                }
+                
+                val currentBase = normalize(currentSsidQuoteFree)
+                val scanBase = normalize(scanSsid)
+                
+                val namesMatch = currentBase.equals(scanBase, ignoreCase = true)
+                
+                // STRICT ATTRIBUTE CHECK: Trust Hardware Frequency, Not Name
+                val isTrue5Ghz = it.frequency > 4900 
+                val threshold = repository.uiState.value.fiveGhzThreshold
+                val isStrong = it.level > threshold
+                
+                if (namesMatch && isTrue5Ghz) {
+                     Log.v("SmartWifiService", "Candidate found via Attribute Check: $scanSsid (${it.frequency}MHz) Match=$namesMatch. Level: ${it.level} > $threshold?")
+                }
+                
+                namesMatch && isTrue5Ghz && isStrong
+                 }
+                 
+                 if (betterNetwork != null) {
+                     Log.i("SmartWifiService", "Found Better 5GHz Network: ${betterNetwork.SSID} (${betterNetwork.BSSID}). Switching...")
+                     repository.updateLastAction("Switching to 5GHz: ${betterNetwork.SSID}")
+                     actionManager.connectTo5GhzNetwork(currentSsidQuoteFree, betterNetwork.BSSID)
+                 } else {
+                     Log.d("SmartWifiService", "No better 5GHz network found for $currentSsidQuoteFree (Scanned ${results.size})")
+                 }
              } else {
-                 Log.d("SmartWifiService", "No better 5GHz network found for $currentSsidQuoteFree")
+                 Log.w("SmartWifiService", "Skipping 5GHz check: Current SSID unknown")
              }
         }
         

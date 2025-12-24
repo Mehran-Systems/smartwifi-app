@@ -94,4 +94,8 @@ class DashboardViewModel @Inject constructor(
     fun set5GhzPriorityEnabled(enabled: Boolean) {
         repository.set5GhzPriorityEnabled(enabled)
     }
+
+    fun setFiveGhzThreshold(value: Int) {
+        repository.setFiveGhzThreshold(value)
+    }
 }

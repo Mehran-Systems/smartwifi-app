@@ -1,0 +1,67 @@
+# SmartWifi App - Network Switching Logic
+
+This document defines the decision-making logic used by the SmartWifi Service to ensure the device stays connected to the best available network.
+
+## 1. Core Philosophy: "Internet First, WiFi Second"
+The app prioritizes actual internet connectivity over just "being connected to WiFi." If a WiFi network has no internet ("Zombie"), the app will aggressively switch to Mobile Data or another WiFi network.
+
+---
+
+## 2. 5GHz Auto-Switching (Priority Mode)
+**Goal**: Automatically upgrade the user from a 2.4GHz connection to a faster 5GHz connection if available and stable.
+
+### A. Candidate Selection (Smart Matching)
+The app scans available networks and looks for a "Better Version" of the current connection. It manages inconsistent naming (Mesh vs. Split bands) using **Smart Normalization**:
+1.  **Normalization**: It strips generic suffixes like `-5G`, `_5GHz`, `2.4G`, ` 5GHz` from both the current SSID and scanned SSIDs.
+    *   *Example*: "HomeWifi-2.4G" (Current) and "HomeWifi-5G" (Scanned) both normalize to "HomeWifi".
+    *   *Result*: They are identified as the *same* network family.
+2.  **Hardware Verification**: It ignores the name for band verification and checks the physical frequency:
+    *   Must be `> 4900 MHz` (True 5GHz).
+    *   This prevents "Fake 5G" names on 2.4GHz hardware from fooling the app.
+
+### B. Signal Threshold
+*   **Configurable**: The switch only happens if the 5GHz signal is stronger than the configured threshold (Default: **-75 dBm**).
+*   **Logic**: 5GHz is faster but has shorter range. We only switch if the 5GHz signal is usable.
+
+### C. The Switch Mechanism (Android 10+)
+*   **API**: Uses `WifiNetworkSuggestion`.
+*   **Action**: The app registers the 5GHz network as a "High Priority (1000)" suggestion with the Android OS.
+*   **Trigger**: It flags `setIsAppInteractionRequired(true)`, telling Android this is an explicit user preference, forcing the OS to evaluate the switch immediately.
+
+---
+
+## 3. Zombie Connection Detection
+**Goal**: Detect when WiFi is connected but has no internet access.
+
+### Logic
+1.  **Passive Check**: Listens to Android's `NetworkCallback` for `NET_CAPABILITY_VALIDATED`.
+2.  **Active Check**: If capability is missing, it attempts a lightweight HTTP/DNS ping.
+3.  **Result**:
+    *   **Success**: Remain connected.
+    *   **Failure**: Mark network as "Zombie".
+    *   **Action**: Disconnect WiFi or force Mobile Data fallback to restore internet access.
+
+---
+
+## 4. Signal Sensitivity & Roaming
+**Goal**: Prevent "Sticky WiFi" (holding onto a weak signal when a better one is close).
+
+### Logic
+*   **Sensitivity Setting**: Configurable slider (mapped to dBm).
+*   **Drop Condition**: If Signal < Sensitivity Threshold (e.g., -85dBm), the app initiates a scan.
+*   **Roaming**: If a known saved network is found with signal > (Current + MinDifference), the app suggests the new network to the OS.
+
+---
+
+## 5. Probation System
+**Goal**: Prevent infinite loop switching (Connect -> No Internet -> Disconnect -> Auto-Connect -> No Internet).
+
+### Logic
+*   If a specific BSSID (Router Access Point) fails the "Zombie Check" multiple times, it is added to a **Probation List**.
+*   **Action**: The app will **ignore** this BSSID for a set duration (e.g., 5 minutes), forcing the OS to find a different Access Point or network.
+
+---
+
+## 6. Mobile Data Fallback
+*   If WiFi is usable but slow (below `MobileDataThreshold` speed), and "Data Fallback" is enabled:
+*   The app advises the user (or automates via Overlay if permitted) to switch to Mobile Data for better performance.

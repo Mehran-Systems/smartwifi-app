@@ -100,4 +100,8 @@ class SmartWifiRepository @Inject constructor() {
     fun set5GhzPriorityEnabled(enabled: Boolean) {
         _uiState.update { it.copy(is5GhzPriorityEnabled = enabled) }
     }
+
+    fun setFiveGhzThreshold(value: Int) {
+        _uiState.update { it.copy(fiveGhzThreshold = value) }
+    }
 }
