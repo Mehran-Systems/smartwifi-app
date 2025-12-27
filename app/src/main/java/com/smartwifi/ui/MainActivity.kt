@@ -21,6 +21,8 @@ import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.collectAsState
@@ -53,11 +55,13 @@ class MainActivity : ComponentActivity() {
                         surface = androidx.compose.ui.graphics.Color(uiState.themeBackground),
                         onSurface = androidx.compose.ui.graphics.Color.White,
                         primary = androidx.compose.ui.graphics.Color(uiState.themeAccent),
-                        secondary = androidx.compose.ui.graphics.Color(0xFF03DAC6)
+                        secondary = androidx.compose.ui.graphics.Color(0xFF03DAC6),
+                        surfaceVariant = androidx.compose.ui.graphics.Color(0xFF2C2C2C) // Dark Grey for boxes
                     )
                 } else {
                     androidx.compose.material3.lightColorScheme(
-                        primary = androidx.compose.ui.graphics.Color(uiState.themeAccent)
+                        primary = androidx.compose.ui.graphics.Color(uiState.themeAccent),
+                        surfaceVariant = androidx.compose.ui.graphics.Color(0xFFE0E0E0) // Silver for boxes
                     )
                 }
             ) {
@@ -94,6 +98,27 @@ class MainActivity : ComponentActivity() {
                                         navController.navigate("wifi_analyzer")
                                     },
                                     icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.ShowChart, null) },
+                                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                                )
+                                androidx.compose.material3.NavigationDrawerItem(
+                                    label = { androidx.compose.material3.Text("Speed Test") },
+                                    selected = false,
+                                    onClick = {
+                                        scope.launch { drawerState.close() }
+                                        navController.navigate("speed_test")
+                                    },
+                                    icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Speed, null) },
+                                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                                )
+                                androidx.compose.material3.Divider(modifier = Modifier.padding(vertical = 8.dp))
+                                androidx.compose.material3.NavigationDrawerItem(
+                                    label = { androidx.compose.material3.Text("Settings") },
+                                    selected = false,
+                                    onClick = {
+                                        scope.launch { drawerState.close() }
+                                        navController.navigate("settings")
+                                    },
+                                    icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Settings, null) },
                                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                                 )
                             }

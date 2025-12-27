@@ -1,5 +1,6 @@
 package com.smartwifi.ui
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -27,6 +28,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.zIndex // Added import
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -42,6 +46,15 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    
+    // Notification State
+    var showGamingNotification by remember { mutableStateOf(false) }
+    LaunchedEffect(showGamingNotification) {
+        if (showGamingNotification) {
+            kotlinx.coroutines.delay(2000)
+            showGamingNotification = false
+        }
+    }
     
     // Animation for Radar
     val infiniteTransition = rememberInfiniteTransition(label = "Radar")
@@ -62,6 +75,47 @@ fun DashboardScreen(
                 navigationIcon = {
                     IconButton(onClick = onMenuClick) {
                         Icon(Icons.Default.Menu, contentDescription = "Menu")
+                    }
+                },
+                actions = {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.size(48.dp) // Fixes layout shift
+                    ) {
+                        IconButton(onClick = { 
+                            viewModel.toggleGamingMode() 
+                            showGamingNotification = true
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Gamepad,
+                                contentDescription = "Gaming Mode",
+                                tint = if (uiState.isGamingMode) androidx.compose.ui.graphics.Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = showGamingNotification,
+                            enter = androidx.compose.animation.fadeIn(),
+                            exit = androidx.compose.animation.fadeOut(),
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .offset(y = 36.dp)
+                                .zIndex(50f) // Ensure on top
+                        ) {
+                            Surface(
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.inverseSurface,
+                                shadowElevation = 4.dp
+                            ) {
+                                Text(
+                                    text = if (uiState.isGamingMode) "ON" else "OFF",
+                                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                     }
                 }
             )
@@ -232,61 +286,11 @@ fun DashboardScreen(
                 
                 Spacer(modifier = Modifier.height(16.dp)) // Reduced 24->16
 
-                // --- Quick Action Cards (Restored) ---
-                // --- Quick Action Grid (2x2) ---
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // Row 1: Toggles
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        QuickActionCard(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Default.Gamepad,
-                            label = "Gaming Mode",
-                            description = "Pause scanning",
-                            isActive = uiState.isGamingMode,
-                            onClick = { viewModel.toggleGamingMode() }
-                        )
-                        QuickActionCard(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Default.SignalCellular4Bar,
-                            label = "Data Fallback",
-                            description = "Mobile backup",
-                            isActive = uiState.isDataFallback,
-                            onClick = { viewModel.toggleDataFallback() }
-                        )
-                    }
 
-                    // Row 2: Navigation
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        QuickActionCard(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Default.Speed,
-                            label = "Speed Test",
-                            description = null,
-                            isActive = false, 
-                            showStatus = false,
-                            onClick = onSpeedTestClick
-                        )
-                        QuickActionCard(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Default.Settings,
-                            label = "Settings",
-                            description = null,
-                            isActive = false, 
-                            showStatus = false,
-                            onClick = onSettingsClick
-                        )
-                    }
-                }
-    }
     // --- Switch Confirmation Dialog Removed (Auto-Switch enabled) ---
     // if (uiState.pendingSwitchNetwork != null) { ... }
         }
+    }
 }
 
 @Composable
