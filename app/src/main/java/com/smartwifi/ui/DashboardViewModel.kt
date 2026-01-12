@@ -4,18 +4,22 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartwifi.data.SmartWifiRepository
 import com.smartwifi.data.model.AppUiState
+import com.smartwifi.logic.WifiActionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val repository: SmartWifiRepository,
     private val signalSensor: com.smartwifi.logic.SignalDirectionSensor,
-    private val speedTestManager: com.smartwifi.logic.FastSpeedTestManager
+    private val speedTestManager: com.smartwifi.logic.FastSpeedTestManager,
+    private val wifiActionManager: WifiActionManager
 ) : ViewModel() {
 
     val uiState: StateFlow<AppUiState> = repository.uiState
@@ -25,30 +29,35 @@ class DashboardViewModel @Inject constructor(
             initialValue = AppUiState()
         )
 
-    // Combining flows or exposing separately. For speed, exposing flow for UI to combine.
     val compassHeading = signalSensor.azimuth
     val targetBearing = signalSensor.targetBearing
 
-    init {
-        // We should ideally control this based on lifecycle,
-        // but for this demo context we start on init.
-        signalSensor.startListening()
+    private val _showStartupDialog = MutableStateFlow(false)
+    val showStartupDialog: StateFlow<Boolean> = _showStartupDialog.asStateFlow()
+    
+    val notificationEvents = repository.notificationEvents
 
+    private val _openPanelEvent = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+    val openPanelEvent = _openPanelEvent.receiveAsFlow()
+
+    init {
+        // Trigger initial scan
+        wifiActionManager.startScan()
         viewModelScope.launch {
             repository.uiState.collect { state ->
-                // Pass RSSI to sensor
                 signalSensor.onRssiUpdate(state.signalStrength)
             }
         }
 
-        // Silent metadata fetch on app start
         viewModelScope.launch {
             try {
                 speedTestManager.fetchMetadata()
             } catch (e: Exception) {
-                // Ignore silent fetch errors
             }
         }
+        
+        // Trigger a scan on startup
+        wifiActionManager.startScan()
     }
 
     override fun onCleared() {
@@ -56,58 +65,49 @@ class DashboardViewModel @Inject constructor(
         signalSensor.stopListening()
     }
 
-    fun setSensitivity(value: Int) {
-        repository.setSensitivity(value)
+    fun dismissStartupDialog() {
+        _showStartupDialog.value = false
     }
 
-    fun setMinSignalDiff(value: Int) {
-        repository.setMinSignalDiff(value)
+    fun showAvailableNetworks() {
+        // Trigger UI event to open panel from Activity context
+        _openPanelEvent.trySend(Unit)
     }
 
-    fun setMobileDataThreshold(value: Int) {
-        repository.setMobileDataThreshold(value)
+    fun connectToNetwork(ssid: String, bssid: String) {
+        viewModelScope.launch {
+            wifiActionManager.connectToNetwork(ssid, bssid)
+            dismissStartupDialog()
+        }
     }
 
-    fun setGeofencing(enabled: Boolean) {
-        repository.setGeofencing(enabled)
+    fun performPendingSwitch() {
+        val network = uiState.value.pendingSwitchNetwork ?: return
+        viewModelScope.launch {
+            wifiActionManager.connectToNetwork(network.ssid, network.bssid)
+            repository.clearPendingSwitch()
+        }
     }
 
-    fun toggleService(enabled: Boolean) {
-        repository.updateServiceStatus(enabled)
+    fun clearPendingSwitch() {
+        repository.clearPendingSwitch()
     }
 
+    fun setSensitivity(value: Int) { repository.setSensitivity(value) }
+    fun setMinSignalDiff(value: Int) { repository.setMinSignalDiff(value) }
+    fun setMobileDataThreshold(value: Int) { repository.setMobileDataThreshold(value) }
+    fun setGeofencing(enabled: Boolean) { repository.setGeofencing(enabled) }
+    fun toggleService(enabled: Boolean) { repository.updateServiceStatus(enabled) }
+    
     fun toggleGamingMode() {
-        // Toggle current state
         val current = uiState.value.isGamingMode
         repository.setGamingMode(!current)
     }
 
-    fun toggleDataFallback() {
-        val current = uiState.value.isDataFallback
-        repository.setDataFallback(!current)
-    }
-
-    fun setHotspotSwitchingEnabled(enabled: Boolean) {
-        repository.setHotspotSwitchingEnabled(enabled)
-    }
-
-    fun set5GhzPriorityEnabled(enabled: Boolean) {
-        repository.set5GhzPriorityEnabled(enabled)
-    }
-
-    fun setFiveGhzThreshold(value: Int) {
-        repository.setFiveGhzThreshold(value)
-    }
-
-    fun setThemeMode(mode: String) {
-        repository.setThemeMode(mode)
-    }
-
-    fun setThemeColors(background: Long, accent: Long) {
-        repository.setThemeColors(background, accent)
-    }
-
-    fun resetSettings() {
-        repository.resetToDefaults()
-    }
+    fun set5GhzPriorityEnabled(enabled: Boolean) { repository.set5GhzPriorityEnabled(enabled) }
+    fun setFiveGhzThreshold(value: Int) { repository.setFiveGhzThreshold(value) }
+    fun setThemeMode(mode: String) { repository.setThemeMode(mode) }
+    fun setThemeColors(bg: Long, accent: Long) { repository.setThemeColors(bg, accent) }
+    fun resetSettings() { repository.resetToDefaults() }
+    fun setHotspotSwitchingEnabled(enabled: Boolean) { repository.setHotspotSwitchingEnabled(enabled) }
 }

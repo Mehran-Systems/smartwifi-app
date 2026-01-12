@@ -6,7 +6,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -40,10 +39,7 @@ fun SettingsScreen(
                 IconButton(onClick = onBackClick) {
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                 }
-            },
-            colors = TopAppBarDefaults.smallTopAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
+            }
         )
 
         Column(
@@ -56,7 +52,7 @@ fun SettingsScreen(
             Text("Appearance", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(8.dp))
             
-            SettingsCard(title = "Appearance") {
+            SettingsCard(title = "Theme Mode") {
                 val map = mapOf("SYSTEM" to "System", "LIGHT" to "Light", "DARK" to "Dark")
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     map.forEach { (mode, label) ->
@@ -93,16 +89,12 @@ fun SettingsScreen(
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            Text("The Brain Configuration", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Text("Switching Configuration", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Section 1: Switching Sensitivity
-            // Section 1: Switching Sensitivity (Min RSSI to maintain connection)
-            SettingsCard(title = "Connection Threshold (Sensitivity)") {
-                // Map 0-100 to -90dBm to -50dBm
-                // 0 -> -90 (Very Conservative, holds on to weak signal)
-                // 100 -> -50 (Very Aggressive, drops signal easily)
-                val currentDbm = -90 + (uiState.sensitivity / 100f * 40).toInt()
+            // Section 1: Sensitivity (Kept at -40dBm range as requested for 2.4GHz logic)
+            SettingsCard(title = "Connection Threshold") {
+                val currentDbm = -90 + (uiState.sensitivity / 100f * 50).toInt()
                 
                 Text("Drop connection if weaker than: $currentDbm dBm")
                 Slider(
@@ -111,44 +103,31 @@ fun SettingsScreen(
                     valueRange = 0f..100f
                 )
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Conservative (-90)", style = MaterialTheme.typography.labelSmall)
-                    Text("Aggressive (-50)", style = MaterialTheme.typography.labelSmall)
+                    Text("-90 dBm", style = MaterialTheme.typography.labelSmall)
+                    Text("-40 dBm", style = MaterialTheme.typography.labelSmall)
                 }
             }
             
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Section 2: Signal Difference (Better Network Threshold)
+            // Section 2: Roaming Trigger
             SettingsCard(title = "Roaming Trigger") {
                 Text("Look for new network if better by: ${uiState.minSignalDiff} dB")
                 Slider(
                     value = uiState.minSignalDiff.toFloat(),
                     onValueChange = { viewModel.setMinSignalDiff(it.toInt()) },
-                    valueRange = 5f..30f,
-                    steps = 24 
+                    valueRange = 2f..30f,
+                    steps = 28
                 )
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("5 dB (Frequent)", style = MaterialTheme.typography.labelSmall)
+                    Text("2 dB (Aggressive)", style = MaterialTheme.typography.labelSmall)
                     Text("30 dB (Stable)", style = MaterialTheme.typography.labelSmall)
                 }
             }
             
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Section 2: Mobile Data Logic
-            SettingsCard(title = "Mobile Data Logic") {
-                Text("Switch to data if Wi-Fi speed below: ${uiState.mobileDataThreshold} Mbps")
-                Slider(
-                    value = uiState.mobileDataThreshold.toFloat(),
-                    onValueChange = { viewModel.setMobileDataThreshold(it.toInt()) },
-                    valueRange = 1f..20f,
-                    steps = 19
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-             
-            // Section 3: Network Preferences (NEW)
+            // Section 3: 5GHz Priority (Reverted to standard -50dBm limit as requested)
             SettingsCard(title = "Network Preferences") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -157,7 +136,7 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Prioritize 5GHz Band", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                        Text("Prefer faster 5GHz networks over 2.4GHz range.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Switch to 5GHz if available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = uiState.is5GhzPriorityEnabled,
@@ -171,79 +150,18 @@ fun SettingsScreen(
                     Slider(
                             value = uiState.fiveGhzThreshold.toFloat(),
                             onValueChange = { viewModel.setFiveGhzThreshold(it.toInt()) },
-                            valueRange = -90f..-50f,
-                            steps = 39 
+                            valueRange = -90f..-50f, // Reverted max to -50
+                            steps = 40 
                     )
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Weak (-90)", style = MaterialTheme.typography.labelSmall)
-                        Text("Strong (-50)", style = MaterialTheme.typography.labelSmall)
+                        Text("-90 dBm", style = MaterialTheme.typography.labelSmall)
+                        Text("-50 dBm", style = MaterialTheme.typography.labelSmall)
                     }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Section 3: Hotspot Handling
-            SettingsCard(title = "Network Handling") {
-                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Switch to Hotspots", fontWeight = FontWeight.Bold)
-                        Text(
-                            "Allow app to auto-connect to mobile hotspots.",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    Switch(
-                        checked = uiState.isHotspotSwitchingEnabled,
-                        onCheckedChange = { viewModel.setHotspotSwitchingEnabled(it) }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Section 3: Gaming Mode Setup
-            SettingsCard(title = "Gaming Mode Setup") {
-                Button(
-                    onClick = { Toast.makeText(context, "Scanning installed games...", Toast.LENGTH_SHORT).show() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Select Games")
-                }
-                Text(
-                    "Select apps that should pause network scanning.",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Section 4: Battery Saver
-            SettingsCard(title = "Battery Saver") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text("Geofencing", fontWeight = FontWeight.Bold)
-                        Text("Only scan aggressively at Home/Office", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Switch(
-                        checked = uiState.isGeofencingEnabled,
-                        onCheckedChange = { viewModel.setGeofencing(it) }
-                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Restore Defaults Option
             OutlinedButton(
                 onClick = { showResetDialog = true },
                 modifier = Modifier.fillMaxWidth(),
@@ -258,13 +176,13 @@ fun SettingsScreen(
                 AlertDialog(
                     onDismissRequest = { showResetDialog = false },
                     title = { Text("Restore Defaults?") },
-                    text = { Text("This will reset all sensitivity and threshold settings to their original factory values. This action cannot be undone.") },
+                    text = { Text("Reset all sensitivity and threshold settings to factory values?") },
                     confirmButton = {
                         TextButton(
                             onClick = {
                                 viewModel.resetSettings()
                                 showResetDialog = false
-                                Toast.makeText(context, "Settings restored to defaults", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Settings restored", Toast.LENGTH_SHORT).show()
                             },
                              colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                         ) {

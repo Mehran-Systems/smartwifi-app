@@ -6,12 +6,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.Dp
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -28,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -42,7 +41,6 @@ fun SpeedTestScreen(
 ) {
     val testState by viewModel.testManager.testState.collectAsState()
     val metricData by viewModel.testManager.metricData.collectAsState()
-    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -89,7 +87,7 @@ fun SpeedTestScreen(
                              .fillMaxHeight()
                              .fillMaxWidth(state.progress)
                              .align(Alignment.CenterStart)
-                             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)) // Revert to primary tint
+                             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
                      )
                 }
 
@@ -98,7 +96,7 @@ fun SpeedTestScreen(
                          is FastSpeedTestManager.TestState.Running -> {
                              if ((testState as FastSpeedTestManager.TestState.Running).phase == FastSpeedTestManager.TestPhase.DOWNLOAD) Icons.Rounded.ArrowDownward else Icons.Rounded.ArrowUpward
                          }
-                         is FastSpeedTestManager.TestState.Preparing -> null // No icon for connecting
+                         is FastSpeedTestManager.TestState.Preparing -> null
                          else -> Icons.Rounded.PlayArrow
                     }
                     val text = when(testState) {
@@ -135,55 +133,39 @@ fun SpeedTestScreen(
     ) { padding ->
         val isFinished = testState is FastSpeedTestManager.TestState.Finished
         
-        // Sequential Animation State
-        // We only expand the content AFTER the gauge has fully faded out to prevent overlap/clutter.
         var contentExpanded by remember { mutableStateOf(false) }
         
         LaunchedEffect(isFinished) {
-            if (isFinished) {
-                // Immediate transition for simultaneous animation
-                contentExpanded = true
-            } else {
-                contentExpanded = false
-            }
+            contentExpanded = isFinished
         }
         
-        // Font Scale Animation (Triggered by contentExpanded)
-        val fontScale by androidx.compose.animation.core.animateFloatAsState(
+        val fontScale by animateFloatAsState(
             targetValue = if (contentExpanded) 1.6f else 1f, 
             animationSpec = tween(1000)
         )
         
-        // Explicit Height Animation
-        // Target: 140.dp (base) + 12.dp (gap) + 220.dp (gauge) = 372.dp
-        val cardsHeight by androidx.compose.animation.core.animateDpAsState(
+        val cardsHeight by animateDpAsState(
             targetValue = if (contentExpanded) 372.dp else 140.dp,
             animationSpec = tween(1000)
         )
 
-        // Root Column with Scroll
         Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
                 .padding(horizontal = 24.dp)
-                .verticalScroll(rememberScrollState()), // Scrollable ROOT
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top // Allow content to stack from top
+            verticalArrangement = Arrangement.Top
         ) {
-             // Static Top Spacer
              Spacer(modifier = Modifier.height(32.dp)) 
 
-
-                    // Result Cards Row
                      Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(cardsHeight), // Animated Explicit Height
+                            .height(cardsHeight),
                         horizontalArrangement = Arrangement.spacedBy(8.dp) 
                     ) {
-                        // Result Card Content
-                         // Download Box
                          Card(
                              modifier = Modifier.weight(1f).fillMaxHeight(),
                              colors = CardDefaults.cardColors(
@@ -208,7 +190,6 @@ fun SpeedTestScreen(
                                 
                                 val dlText = if (dlVal != null) "%.0f".format(dlVal) else "-"
                                 
-                                // Scaled Text
                                 Text(
                                     text = dlText, 
                                     fontSize = (32 * fontScale).sp, 
@@ -232,7 +213,6 @@ fun SpeedTestScreen(
                             }
                         }
                         
-                        // Upload Box
                         Card(
                              modifier = Modifier.weight(1f).fillMaxHeight(),
                              colors = CardDefaults.cardColors(
@@ -255,7 +235,6 @@ fun SpeedTestScreen(
                                 }
                                 
                                 val ulText = if (ulVal != null) "%.0f".format(ulVal) else "-"
-                                 // Scaled Text
                                 Text(
                                     text = ulText, 
                                     fontSize = (32 * fontScale).sp, 
@@ -278,17 +257,16 @@ fun SpeedTestScreen(
                                 }
                             }
                         }
-                    } // End Result Row
+                    } 
     
                     AnimatedVisibility(
-                        visible = !isFinished && !contentExpanded, // Strictly ensure invisible if expanded
+                        visible = !isFinished && !contentExpanded,
                         enter = fadeIn(animationSpec = tween(1000)) + expandVertically(animationSpec = tween(1000)),
                         exit = fadeOut(animationSpec = tween(1200)) + shrinkVertically(animationSpec = tween(1200)) 
                     ) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                             // Gap between Cards and Gauge (Increased)
                              Spacer(modifier = Modifier.height(24.dp))
                         
                              val currentSpeed = when(testState) {
@@ -302,7 +280,6 @@ fun SpeedTestScreen(
                                            
                              val gaugeColor = if (isUpload) Color(0xFFFF9800) else Color(0xFF4CAF50)
                              
-                             // Gauge Size 220dp (Reverted to original)
                              Box(contentAlignment = Alignment.Center, modifier = Modifier.size(220.dp)) {
                                  com.smartwifi.ui.components.SpeedometerGauge(
                                      currentValue = currentSpeed,
@@ -328,27 +305,26 @@ fun SpeedTestScreen(
                                      )
                                  }
                              }
-                             
-                             // Bottom spacing below gauge (Tightened to 4dp)
                              Spacer(modifier = Modifier.height(4.dp))
                         }
-                    } // End AnimatedVisibility
+                    }
 
-                // 4. Detailed Metrics Grid
                 Spacer(modifier = Modifier.height(8.dp))
     
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Row 1: Client & Server
-                    // Row 1: Client & Server
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // Client Info
+                    // Row 1: Client & Server (Fixed height to prevent vertical expansion)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), 
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         MetricCell(
-                            modifier = Modifier.weight(1f), 
+                            modifier = Modifier.weight(1f).fillMaxHeight(), 
                             label = "Client", 
-                            icon = Icons.Rounded.Person
+                            icon = Icons.Rounded.Person,
+                            minHeight = 90.dp
                         ) {
                             val location = metricData.userLocation
                             val ip = metricData.clientIp
@@ -356,18 +332,16 @@ fun SpeedTestScreen(
                             
                             val isClientLoaded = !location.isNullOrEmpty() && location != "Unknown"
                             
-                            // Stacked Top to Bottom
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 if (isClientLoaded) {
-                                    Text(location!!, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold) 
+                                    Text(location!!, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) 
                                     if (!ip.isNullOrEmpty() && ip != "Unknown") {
-                                        Text(ip, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                        Text(ip, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, maxLines = 1)
                                     }
                                     if (!isp.isNullOrEmpty()) {
-                                        Text(isp, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                        Text(isp, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                 } else {
-                                    // 3 Shimmer Placeholders
                                     ShimmerLine(width = 100.dp)
                                     ShimmerLine(width = 120.dp)
                                     ShimmerLine(width = 80.dp)
@@ -375,23 +349,21 @@ fun SpeedTestScreen(
                             }
                         }
                         
-                        // Server Info
                         MetricCell(
-                            modifier = Modifier.weight(1f), 
+                            modifier = Modifier.weight(1f).fillMaxHeight(), 
                             label = "Server", 
-                            icon = Icons.Rounded.Dns
+                            icon = Icons.Rounded.Dns,
+                            minHeight = 90.dp
                         ) {
                              val serverStr = metricData.serverName
                              val isServerLoaded = !serverStr.isNullOrEmpty() && serverStr != "Unknown Server"
                              
                              Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                  if (isServerLoaded) {
-                                     // Split and render each server line (avoids duplication)
-                                     serverStr!!.split("\n").distinct().forEach { serverLine ->
-                                         Text(serverLine, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                     serverStr!!.split("\n").distinct().take(3).forEach { serverLine ->
+                                         Text(serverLine, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                      }
                                  } else {
-                                     // 3 Shimmer Placeholders
                                      ShimmerLine(width = 90.dp)
                                      ShimmerLine(width = 110.dp)
                                      ShimmerLine(width = 70.dp)
@@ -401,45 +373,55 @@ fun SpeedTestScreen(
                     }
     
                     // Row 2: Internal IP & Packet Loss
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                          MetricCell(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                             label = "Internal IP",
-                            icon = Icons.Rounded.Router
+                            icon = Icons.Rounded.Router,
+                            minHeight = 64.dp
                         ) {
-                            Text(metricData.internalIp ?: "-", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = metricData.internalIp ?: "-", 
+                                style = MaterialTheme.typography.labelMedium, 
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
                         }
                         
                          MetricCell(
-                             modifier = Modifier.weight(1f), 
+                             modifier = Modifier.weight(1f).fillMaxHeight(), 
                              label = "Packet Loss", 
-                             icon = Icons.Rounded.Warning
+                             icon = Icons.Rounded.Warning,
+                             minHeight = 64.dp
                          ) {
-                             Text(if (metricData.packetLoss != null) "%.1f%%".format(metricData.packetLoss) else "-", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                             Text(if (metricData.packetLoss != null) "%.1f%%".format(metricData.packetLoss) else "-", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                          }
                     }
                     
-                    // Row 3: Pings (Idle Only)
-                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                     Row(
+                         modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                         horizontalArrangement = Arrangement.spacedBy(8.dp)
+                     ) {
                          MetricCell(
-                             modifier = Modifier.weight(1f), 
+                             modifier = Modifier.weight(1f).fillMaxHeight(), 
                              label = "Idle Ping", 
-                             icon = Icons.Rounded.HourglassEmpty
+                             icon = Icons.Rounded.HourglassEmpty,
+                             minHeight = 64.dp
                          ) {
-                             Text("${metricData.idlePing ?: "-"} ms", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                             Text("${metricData.idlePing ?: "-"} ms", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                          }
                     }
                 }
                 
-
-                
-                // Spacer to ensure content doesn't get hidden behind bottom bar
                 Spacer(modifier = Modifier.height(80.dp))
             }
         }
     }
 
-// Shimmer Animation Component
 @Composable
 fun ShimmerLine(
     modifier: Modifier = Modifier,
@@ -460,7 +442,7 @@ fun ShimmerLine(
 
     val brush = Brush.linearGradient(
         colors = listOf(
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), // Primary Color
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
             MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
             MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
         ),
@@ -480,10 +462,12 @@ fun MetricCell(
     modifier: Modifier = Modifier,
     label: String,
     icon: ImageVector,
+    minHeight: Dp = 72.dp,
     content: @Composable () -> Unit
 ) {
     Row(
         modifier = modifier
+            .heightIn(min = minHeight)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.5f), MaterialTheme.shapes.small)
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -495,14 +479,15 @@ fun MetricCell(
             modifier = Modifier.size(20.dp)
         )
         Spacer(Modifier.width(8.dp))
-        Column {
+        Column(verticalArrangement = Arrangement.Center) {
              content()
-             Spacer(modifier = Modifier.height(4.dp))
+             Spacer(modifier = Modifier.height(2.dp))
              Text(
                  text = label, 
                  style = MaterialTheme.typography.labelSmall,
                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                 maxLines = 1
+                 maxLines = 1,
+                 overflow = TextOverflow.Ellipsis
              )
         }
     }

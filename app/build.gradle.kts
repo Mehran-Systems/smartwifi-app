@@ -3,7 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    // id("org.jetbrains.kotlin.plugin.compose") // Removed for Kotlin 1.9
+    id("org.jetbrains.kotlin.plugin.compose")
     id("kotlin-kapt")
     id("com.google.dagger.hilt.android")
 }
@@ -11,6 +11,7 @@ plugins {
 android {
     namespace = "com.smartwifi"
     compileSdk = 34
+    buildToolsVersion = "34.0.0"
 
     defaultConfig {
         applicationId = "com.smartwifi"
@@ -42,7 +43,7 @@ android {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
+        // kotlinCompilerExtensionVersion = "1.5.14" // Not needed for Kotlin 2.0
     }
     packaging {
         resources {

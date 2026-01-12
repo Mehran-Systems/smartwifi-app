@@ -18,13 +18,14 @@ class SpeedTestViewModel @Inject constructor(
     private var lastSavedTimestamp = 0L
 
     init {
-        // Reset state when entering the screen (as requested by user)
-        // But wait, if configuration change happens we don't want to reset running test?
-        // User said: "when i go back to the app and comeback to the speedtest page it still shows...".
-        // This implies navigation return. ViewModel might survive if scoped to NavGraph properly.
-        // Usually safe to reset if Idle or Finished. If Running, keep it.
+        // Reset state if not running to clean up previous results
         if (testManager.testState.value !is FastSpeedTestManager.TestState.Running) {
              testManager.reset()
+        }
+        
+        // Pre-fetch metadata (Client IP, Server Info) so it's visible before test starts
+        viewModelScope.launch {
+            testManager.fetchMetadata()
         }
         
         // Auto-save logic
@@ -32,9 +33,8 @@ class SpeedTestViewModel @Inject constructor(
             testManager.testState.collect { state ->
                 if (state is FastSpeedTestManager.TestState.Finished) {
                     val metrics = testManager.metricData.value
-                    // Avoid duplicate saves if flow re-emits same state object
                     val now = System.currentTimeMillis()
-                    if (now - lastSavedTimestamp > 2000) { // Simple debounce
+                    if (now - lastSavedTimestamp > 2000) {
                         lastSavedTimestamp = now
                         val result = com.smartwifi.data.db.SpeedTestResult(
                             timestamp = now,
@@ -54,22 +54,18 @@ class SpeedTestViewModel @Inject constructor(
     }
 
     fun startTest() {
-        testJob?.cancel() // Ensure strict single run
+        testJob?.cancel() 
         testJob = viewModelScope.launch {
             try {
                 testManager.startSpeedTest()
             } catch (e: Exception) {
-                // Handled in Manager, but good safety
+                // Error handled in manager
             }
         }
     }
     
     fun cancelTest() {
         testJob?.cancel()
-        testManager.reset()
-    }
-    
-    fun reset() {
         testManager.reset()
     }
 }
