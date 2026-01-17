@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -58,7 +59,9 @@ fun SettingsScreen(
                         logContent = viewModel.getLogs()
                         showLogDialog = true 
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF4CAF50))
                 ) {
                     Text("View Offline Logs")
                 }
@@ -71,7 +74,8 @@ fun SettingsScreen(
                         Toast.makeText(context, "Logs Cleared", Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF4CAF50))
                 ) {
                     Text("Clear Logs")
                 }
@@ -95,7 +99,7 @@ fun SettingsScreen(
                         }
                     },
                     confirmButton = {
-                        TextButton(onClick = { showLogDialog = false }) {
+                        TextButton(onClick = { showLogDialog = false }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))) {
                             Text("Close")
                         }
                     }
@@ -105,7 +109,7 @@ fun SettingsScreen(
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            Text("Appearance", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Text("Appearance", style = MaterialTheme.typography.titleMedium, color = Color(0xFF4CAF50))
             Spacer(modifier = Modifier.height(8.dp))
             
             SettingsCard(title = "Theme Mode") {
@@ -115,7 +119,8 @@ fun SettingsScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(
                                 selected = uiState.themeMode == mode,
-                                onClick = { viewModel.setThemeMode(mode) }
+                                onClick = { viewModel.setThemeMode(mode) },
+                                colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF4CAF50))
                             )
                             Text(text = label, style = MaterialTheme.typography.bodyMedium)
                         }
@@ -123,29 +128,14 @@ fun SettingsScreen(
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
-                OutlinedButton(
-                    onClick = { showThemeDialog = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Customize Theme Colors")
-                }
             }
-            
-            if (showThemeDialog) {
-                com.smartwifi.ui.components.ThemeSelectionDialog(
-                    currentBackground = uiState.themeBackground,
-                    currentAccent = uiState.themeAccent,
-                    onDismiss = { showThemeDialog = false },
-                    onConfirm = { bg, accent ->
-                        viewModel.setThemeColors(bg, accent)
-                        showThemeDialog = false
-                    }
-                )
-            }
+            // Customize Theme Colors Button Removed
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            Text("Switching Configuration", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Text("Switching Configuration", style = MaterialTheme.typography.titleMedium, color = Color(0xFF4CAF50))
             Spacer(modifier = Modifier.height(16.dp))
 
             // Section 1: Sensitivity (Kept at -40dBm range as requested for 2.4GHz logic)
@@ -156,7 +146,8 @@ fun SettingsScreen(
                 Slider(
                     value = uiState.sensitivity.toFloat(),
                     onValueChange = { viewModel.setSensitivity(it.toInt()) },
-                    valueRange = 0f..100f
+                    valueRange = 0f..100f,
+                    colors = SliderDefaults.colors(thumbColor = Color(0xFF4CAF50), activeTrackColor = Color(0xFF4CAF50))
                 )
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("-90 dBm", style = MaterialTheme.typography.labelSmall)
@@ -173,7 +164,8 @@ fun SettingsScreen(
                 Slider(
                     value = uiState.badgeSensitivity.toFloat(),
                     onValueChange = { viewModel.setBadgeSensitivity(it.toInt()) },
-                    valueRange = 0f..100f
+                    valueRange = 0f..100f,
+                    colors = SliderDefaults.colors(thumbColor = Color(0xFF4CAF50), activeTrackColor = Color(0xFF4CAF50))
                 )
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Only Extremely Weak", style = MaterialTheme.typography.labelSmall)
@@ -190,7 +182,8 @@ fun SettingsScreen(
                     value = uiState.minSignalDiff.toFloat(),
                     onValueChange = { viewModel.setMinSignalDiff(it.toInt()) },
                     valueRange = 2f..30f,
-                    steps = 28
+                    steps = 28,
+                    colors = SliderDefaults.colors(thumbColor = Color(0xFF4CAF50), activeTrackColor = Color(0xFF4CAF50))
                 )
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("2 dB (Aggressive)", style = MaterialTheme.typography.labelSmall)
@@ -213,7 +206,8 @@ fun SettingsScreen(
                     }
                     Switch(
                         checked = uiState.is5GhzPriorityEnabled,
-                        onCheckedChange = { viewModel.set5GhzPriorityEnabled(it) }
+                        onCheckedChange = { viewModel.set5GhzPriorityEnabled(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF4CAF50), checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f))
                     )
                 }
                 
@@ -224,7 +218,8 @@ fun SettingsScreen(
                             value = uiState.fiveGhzThreshold.toFloat(),
                             onValueChange = { viewModel.setFiveGhzThreshold(it.toInt()) },
                             valueRange = -90f..-50f, // Reverted max to -50
-                            steps = 40 
+                            steps = 40,
+                            colors = SliderDefaults.colors(thumbColor = Color(0xFF4CAF50), activeTrackColor = Color(0xFF4CAF50))
                     )
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("-90 dBm", style = MaterialTheme.typography.labelSmall)

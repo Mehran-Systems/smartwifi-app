@@ -275,10 +275,12 @@ class SmartWifiService : Service() {
     private fun showSwitchNotification(ssid: String) {
         val channelId = "SMART_WIFI_SUGGESTIONS"
         
-        // Create intent to open Dashboard with Dialog
-        val intent = Intent(this, com.smartwifi.ui.MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            data = android.net.Uri.parse("smartwifi://dashboard?open_dialog=true") // Deep link style or just handle extras
+        // Create intent to open WiFi Panel DIRECTLY (Matching Badge Logic)
+        val intent = Intent(android.provider.Settings.Panel.ACTION_INTERNET_CONNECTIVITY).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        if (intent.resolveActivity(packageManager) == null) {
+            intent.action = android.provider.Settings.ACTION_WIFI_SETTINGS
         }
         val pendingIntent = android.app.PendingIntent.getActivity(
             this, 0, intent, 
@@ -320,19 +322,12 @@ class SmartWifiService : Service() {
     private var badgeView: android.view.View? = null
     private val windowManager by lazy { getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager }
 
-    private fun showBadge(isWarning: Boolean = false) {
+    private fun showBadge(isWarning: Boolean = false, ssid: String? = null) {
         val canDraw = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) 
             android.provider.Settings.canDrawOverlays(this) 
         else true
 
-        Log.d("SmartWifiService", "showBadge() called. isWarning=$isWarning, canDrawOverlays=$canDraw, alreadyShowing=${badgeView != null}")
-
-        if (!canDraw) {
-            Log.w("SmartWifiService", "Cannot show badge: Overlay permission missing")
-            return
-        }
-
-        if (badgeView != null) return // Already showing
+        if (!canDraw || badgeView != null) return
 
         try {
             val params = android.view.WindowManager.LayoutParams(
@@ -347,35 +342,36 @@ class SmartWifiService : Service() {
                 android.graphics.PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = android.view.Gravity.TOP or android.view.Gravity.END
-                y = 200 // Offset from top
-                x = 0 // sticky to right edge
+                y = 200 
+                x = 30 // Margin from right
             }
 
-            // Create Programmatic View (Simple semi-transparent icon)
-            val icon = android.widget.ImageView(this).apply {
-                // Use our new WiFi Vector Icon
-                setImageResource(com.smartwifi.R.drawable.ic_badge_wifi)
+            // DETECT THEME (Service Context)
+            val nightModeFlags = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+            val isDark = nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES
+            
+            // COLORS based on Design
+            val bgColor = if (isDark) android.graphics.Color.parseColor("#121212") else android.graphics.Color.WHITE
+            val textColorPrimary = if (isDark) android.graphics.Color.WHITE else android.graphics.Color.BLACK
+            val textColorSecondary = if (isDark) android.graphics.Color.LTGRAY else android.graphics.Color.GRAY
+
+            // PILL CONTAINER
+            val container = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                gravity = android.view.Gravity.CENTER
+                setPadding(30, 15, 30, 15) // REDUCED PADDING
+                elevation = 20f // Drop Shadow
                 
-                // Using a color filter to make it look "Active"
-                val color = if (isWarning) android.graphics.Color.parseColor("#FF9800") else android.graphics.Color.parseColor("#4CAF50")
-                setColorFilter(color) 
-                setBackgroundColor(android.graphics.Color.parseColor("#CCFFFFFF")) // Semi-transparent white bg
-                setPadding(20, 20, 20, 20)
-                
-                // Circular Shape
+                // Capsule Shape
                 background = android.graphics.drawable.GradientDrawable().apply {
-                     shape = android.graphics.drawable.GradientDrawable.OVAL
-                     setColor(android.graphics.Color.parseColor("#E0FFFFFF"))
-                     setStroke(2, color)
+                    shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                    cornerRadius = 100f // Full pill calculation
+                    setColor(bgColor)
                 }
                 
-                // USER REQUEST: Increase Badge Size
-                setPadding(35, 35, 35, 35) // Increased from 20 to 35 for larger touch area
-                
+                // Click Action
                 setOnClickListener {
-                     // Launch Panel Intent
                      try {
-                         // USER REQUEST: Open Internet Panel DIRECTLY (Skip App Main Activity)
                          val intent = Intent(android.provider.Settings.Panel.ACTION_INTERNET_CONNECTIVITY).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                         }
@@ -392,31 +388,62 @@ class SmartWifiService : Service() {
                             android.app.ActivityOptions.makeBasic().apply {
                                 setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
                             }.toBundle()
-                        } else {
-                            null
-                        }
+                        } else { null }
                         
                         pendingIntent.send(options)
-                        hideBadge() // Auto hide on click
+                        hideBadge()
                      } catch (e: Exception) {
-                         Log.e("SmartWifiService", "Failed to launch intent from badge", e)
-                         android.widget.Toast.makeText(context, "Tap Notification to switch", android.widget.Toast.LENGTH_SHORT).show()
+                         android.widget.Toast.makeText(context, "Tap to switch", android.widget.Toast.LENGTH_SHORT).show()
                      }
                 }
             }
+
+            // LABEL 1: "SUGGESTED NETWORK"
+            val labelTitle = android.widget.TextView(this).apply {
+                text = "SUGGESTED NETWORK"
+                textSize = 8f // REDUCED SIZE
+                setTextColor(textColorSecondary)
+                letterSpacing = 0.1f // Spacing to match design
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                gravity = android.view.Gravity.CENTER
+            }
+            container.addView(labelTitle)
+
+            // LABEL 2: SSID (Animated Marquee for long names)
+            val labelSsid = android.widget.TextView(this).apply {
+                text = (ssid ?: "Optimized Network").replace("\"", "")
+                textSize = 14f 
+                setTextColor(textColorPrimary)
+                typeface = android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.BOLD)
+                gravity = android.view.Gravity.CENTER
+                
+                // MARQUEE SETUP
+                setSingleLine(true)
+                ellipsize = android.text.TextUtils.TruncateAt.MARQUEE
+                marqueeRepeatLimit = -1 // Loop forever
+                maxWidth = 500 // Force width limit to trigger scroll
+                isSelected = true // REQUIRED for marquee to start
+                
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = 4 
+                }
+            }
+            container.addView(labelSsid)
             
-            badgeView = icon
+            badgeView = container
             windowManager.addView(badgeView, params)
             
-            // SLIDE IN ANIMATION
-            icon.translationX = 300f // Start off-screen (right)
-            icon.animate()
+            // SLIDE IN
+            container.translationX = 400f 
+            container.animate()
                 .translationX(0f)
-                .setDuration(400)
-                .setInterpolator(android.view.animation.DecelerateInterpolator())
+                .setDuration(500)
+                .setInterpolator(android.view.animation.OvershootInterpolator(1.2f)) // Bouncy effect
                 .start()
             
-            // Auto-hide after 15 seconds (with slide out)
             serviceScope.launch {
                 delay(15000)
                 withContext(Dispatchers.Main) { hideBadge() }
@@ -487,9 +514,47 @@ class SmartWifiService : Service() {
                 // Use the BEST available info
                 val info = getBestWifiInfo()
                 
-                // Retrieve SSID with robust fallback
+                // Determine PRIMARY Transport (WiFi vs Mobile)
+                val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+                val activeNetwork = cm.activeNetwork
+                val caps = cm.getNetworkCapabilities(activeNetwork)
+                val isMobileActive = caps != null && caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) && !caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+                
+                // Retrieve SSID or Carrier Name
                 var displaySsid = "Scanning..."
-                if (info != null) {
+                var activeSource = ConnectionSource.WIFI_ROUTER
+                
+                if (isMobileActive) {
+                    // Mobile Data is Primary - Handling Dual SIM correct detection
+                    var carrierName = "Mobile Data"
+                    try {
+                        val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as android.telephony.SubscriptionManager
+                        val tm = getSystemService(Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
+                        
+                        if (androidx.core.app.ActivityCompat.checkSelfPermission(this@SmartWifiService, android.Manifest.permission.READ_PHONE_STATE) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            val dataSubId = android.telephony.SubscriptionManager.getDefaultDataSubscriptionId()
+                            val activeSub = sm.activeSubscriptionInfoList?.find { it.subscriptionId == dataSubId }
+                            
+                            if (activeSub != null) {
+                                // Prefer Carrier Name from the Subscription Info (The actual SIM card name)
+                                carrierName = activeSub.carrierName?.toString() ?: activeSub.displayName?.toString() ?: tm.networkOperatorName
+                            } else {
+                                carrierName = tm.networkOperatorName
+                            }
+                        } else {
+                            carrierName = tm.networkOperatorName
+                        }
+                    } catch (e: Exception) {
+                        Log.e("SmartWifiService", "Dual SIM detection failed", e)
+                        // Fallback
+                        val tm = getSystemService(Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
+                        carrierName = tm.networkOperatorName
+                    }
+                    
+                    displaySsid = if (carrierName.isNullOrEmpty()) "Mobile Data" else carrierName
+                    activeSource = ConnectionSource.MOBILE_DATA
+                } else if (info != null) {
+                    // WiFi is Primary (or at least connected)
                     var rawSsid = info.ssid.replace("\"", "")
                     if (rawSsid == "<unknown ssid>" || rawSsid.isEmpty() || rawSsid == "0x") {
                          // Fallback: Match BSSID against latest scan results using robust logic
@@ -511,12 +576,30 @@ class SmartWifiService : Service() {
                          }
                     }
                     displaySsid = rawSsid
+                    activeSource = ConnectionSource.WIFI_ROUTER
+                } else {
+                    // Disconnected or Scanning
+                    // Check if we have Mobile Data even if it's not "Primary" (e.g. WiFi off)
+                    val tm = getSystemService(Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
+                    if (tm.dataState == android.telephony.TelephonyManager.DATA_CONNECTED) {
+                         val carrierName = tm.networkOperatorName
+                         displaySsid = if (carrierName.isNullOrEmpty()) "Mobile Data" else carrierName
+                         activeSource = ConnectionSource.MOBILE_DATA
+                    }
                 }
                 
-                updateCoreUI(info, displaySsid) 
+                val freqString = if ((info?.frequency ?: 2400) > 4900) "5GHz" else "2.4GHz"
+                repository.updateNetworkInfo(displaySsid, info?.rssi ?: -100, freqString)
+                repository.updateConnectionSource(activeSource)
                 
+                // Explicitly update Internet Status based on capabilities
+                val hasInternet = caps != null && caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                                  && caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                val iStatus = if (hasInternet) "Connected" else "No Internet"
+                repository.updateInternetStatus(iStatus)
+
                 val ui = repository.uiState.value
-                val linkSpeed = if (ui.connectionSource == ConnectionSource.MOBILE_DATA) mobileMonitor.getLinkSpeed() else (info?.linkSpeed ?: 0)
+                val linkSpeed = if (activeSource == ConnectionSource.MOBILE_DATA) mobileMonitor.getLinkSpeed() else (info?.linkSpeed ?: 0)
                 repository.updateTrafficStats(if (linkSpeed > 0) linkSpeed else 10, speedStr)
 
                 // FORCED HEARTBEAT: Call optimization every loop
@@ -687,12 +770,30 @@ class SmartWifiService : Service() {
                 requiredDiff = -5 
             }
 
-            // Evaluation
+            // Evaluation matches
             if (scan.level >= (currentRssi + requiredDiff)) {
-                 // Check if this is the "Best" so far in this loop
-                 if (bestCandidate == null || scan.level > bestCandidate.level) {
+                 // We found a VALID candidate. Now check if it's the BEST one so far.
+                 if (bestCandidate == null) {
                      bestCandidate = scan
                      statusMsg = if (is5Ghz) "Better 5G Found: ${scan.SSID}" else "Stronger Signal Found: ${scan.SSID}"
+                 } else {
+                     val bestIs5G = bestCandidate.frequency > 4900
+                     
+                     // HIERARCHY:
+                     // 1. 5G beats 2.4G (Always)
+                     // 2. Stronger Signal beats Weaker Signal (Same band)
+                     
+                     if (is5Ghz && !bestIs5G) {
+                         // New is 5G, Old is 2.4G -> Switch to New (Priority Win)
+                         bestCandidate = scan
+                         statusMsg = "Better 5G Found: ${scan.SSID}"
+                     } else if (is5Ghz == bestIs5G) {
+                         // Same Band -> Check Signals
+                         if (scan.level > bestCandidate.level) {
+                             bestCandidate = scan
+                             statusMsg = if (is5Ghz) "Better 5G Found: ${scan.SSID}" else "Stronger Signal Found: ${scan.SSID}"
+                         }
+                     }
                  }
             }
             
@@ -711,20 +812,27 @@ class SmartWifiService : Service() {
             debugger.logUserSuggestion(bestCandidate.SSID, statusMsg)
             Log.i("SmartWifiService", "USER PROMPT: Suggesting switch to ${bestCandidate.SSID} (${bestCandidate.BSSID}) because: $statusMsg")
             
-            // Show Floating Badge (System-Wide Overlay) - ALWAYS show/update visual
-            serviceScope.launch(Dispatchers.Main) {
-                 showBadge(isWarning = false)
-            }
+            // USER PRIORITY: Badge > Notification (Mutually Exclusive)
+            val canDrawOverlays = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) 
+                                    android.provider.Settings.canDrawOverlays(this) 
+                                  else true
 
-            // Notification Throttling (Avoid Noise Spam)
-            val now = System.currentTimeMillis()
-            if (now - lastNotificationTime > 15000) { // Max 1 beep every 15s
-                lastNotificationTime = now
-                serviceScope.launch {
-                     showSwitchNotification(bestCandidate.SSID)
-                }
+            if (canDrawOverlays) {
+                 // PRIORITY 1: Floating Badge
+                 serviceScope.launch(Dispatchers.Main) {
+                      showBadge(isWarning = false, ssid = bestCandidate.SSID)
+                 }
             } else {
-                debugger.logDecision("Notification sound throttled (too frequent)")
+                 // PRIORITY 2: System Notification (Fallback only if Badge permission missing)
+                 val now = System.currentTimeMillis()
+                 if (now - lastNotificationTime > 15000) { // Max 1 beep every 15s
+                     lastNotificationTime = now
+                     serviceScope.launch {
+                          showSwitchNotification(bestCandidate.SSID)
+                     }
+                 } else {
+                     debugger.logDecision("Notification sound throttled (too frequent)")
+                 }
             }
                  
                  // Trigger In-App Snackbar
@@ -744,6 +852,10 @@ class SmartWifiService : Service() {
         } else {
             val label = if (isPoorSignal) "Signal Weak ($currentRssi < $thresholdDbm). Searching..." else "Signal Optimal ($currentRssi dBm)"
             repository.updateLastAction(label)
+            
+            // CLEAR STALE NOTIFICATIONS
+            // If no better candidate is found (or we are already on best), clear any pending UI prompt
+            repository.setPendingSwitch(null)
             
             // If signal is poor (based on badge threshold), show the badge as a warning
             

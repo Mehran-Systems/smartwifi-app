@@ -178,29 +178,47 @@ fun DashboardScreen(
                 exit = shrinkVertically() + fadeOut()
             ) {
                 uiState.pendingSwitchNetwork?.let { network ->
+                    // THEME FIX: Check APP SETTING first, then System Theme
+                    val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+                    val isDark = when (uiState.themeMode) {
+                        "LIGHT" -> false
+                        "DARK" -> true
+                        else -> isSystemDark
+                    }
+                    
+                    val cardBg = if (isDark) Color(0xFF1E1E1E) else Color.White
+                    val titleColor = if (isDark) Color.White else Color.Black
+                    val bodyColor = if (isDark) Color.Gray else Color.DarkGray
+                    
                     Card(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        colors = CardDefaults.cardColors(containerColor = cardBg), 
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.5f)),
                         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                     ) {
                         Row(
                             modifier = Modifier.padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.WifiTethering, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            // Green Icon
+                            Icon(Icons.Default.WifiTethering, contentDescription = null, tint = Color(0xFF4CAF50))
                             Spacer(Modifier.width(16.dp))
                             Column(Modifier.weight(1f)) {
-                                Text("Better Network Found", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                Text("Switch to: ${network.ssid} (${if (network.frequency > 4900) "5GHz" else "2.4GHz"})", style = MaterialTheme.typography.bodySmall)
+                                Text("Better Network Found", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = titleColor)
+                                Text("Switch to: ${network.ssid} (${if (network.frequency > 4900) "5GHz" else "2.4GHz"})", style = MaterialTheme.typography.bodySmall, color = bodyColor)
                             }
                             Button(
                                 onClick = { viewModel.performPendingSwitch() },
-                                shape = RoundedCornerShape(8.dp)
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF4CAF50), // Hardcoded Green
+                                    contentColor = Color.White
+                                )
                             ) {
                                 Text("Switch")
                             }
                             IconButton(onClick = { viewModel.clearPendingSwitch() }) {
-                                Icon(Icons.Default.Close, contentDescription = "Close")
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = bodyColor)
                             }
                         }
                     }
@@ -216,11 +234,11 @@ fun DashboardScreen(
                         indication = null
                     ) { viewModel.showAvailableNetworks() } // Tap Radar to Open Dialog
             ) {
-                val radarColor = getRadarColor(uiState.internetStatus)
+                val radarColor = getRadarColor(uiState.internetStatus, uiState.signalStrength, uiState.connectionSource)
                 LiquidRadar(
                     modifier = Modifier.fillMaxSize(),
                     blobColor = radarColor,
-                    pulseSpeed = if (uiState.internetStatus == "Connected") 1.0f else 0.5f
+                    pulseSpeed = if (uiState.internetStatus == "Connected" || uiState.signalStrength > -75) 1.0f else 0.5f
                 )
                 
                 Box(
@@ -279,11 +297,24 @@ fun DashboardScreen(
                         
                         Spacer(modifier = Modifier.height(4.dp))
 
+
+                        val infoText = if (uiState.connectionSource == ConnectionSource.MOBILE_DATA) 
+                                            "${uiState.signalStrength} dBm" 
+                                       else 
+                                            "${uiState.frequencyBand} • ${uiState.signalStrength} dBm"
+                                            
                         Text(
-                            text = "${uiState.frequencyBand} • ${uiState.signalStrength} dBm", 
+                            text = infoText, 
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.Medium
+                        )
+                        
+                        Text(
+                            text = "[DBG: ${uiState.signalStrength} | ${uiState.internetStatus}]",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 8.sp,
+                            color = Color.LightGray
                         )
                     }
                 }
@@ -363,7 +394,7 @@ fun DashboardScreen(
                             text = "${uiState.linkSpeed} Mbps", 
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            color = Color(0xFF4CAF50) // Green Theme
                         )
                     }
                      
@@ -375,7 +406,7 @@ fun DashboardScreen(
                             text = uiState.currentUsage, 
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary
+                            color = Color(0xFF4CAF50) // Green Theme
                         )
                     }
                 }
@@ -393,22 +424,26 @@ fun StatusIcon(icon: ImageVector, label: String, isActive: Boolean) {
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+            tint = if (isActive) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
             modifier = Modifier.size(32.dp)
         )
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+            color = if (isActive) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
         )
     }
 }
 
-fun getRadarColor(status: String): Color {
-    return when (status) {
-        "Connected" -> Color(0xFF4CAF50)
-        "No Internet" -> Color(0xFFF44336)
-        else -> Color(0xFFFFC107)
+fun getRadarColor(status: String, rssi: Int, source: ConnectionSource): Color {
+    if (status == "No Internet") return Color(0xFFF44336) // Red (Priority Warning)
+    if (source == ConnectionSource.MOBILE_DATA) return Color(0xFF2196F3) // Blue
+    
+    // WiFi Signal Thresholds
+    return when {
+         rssi >= -65 -> Color(0xFF4CAF50) // Strong Green
+         rssi >= -80 -> Color(0xFFFFC107) // Moderate Yellow
+         else -> Color(0xFFFF5722) // Weak Orange/Red
     }
 }
 

@@ -67,6 +67,21 @@ class MainActivity : ComponentActivity() {
                 else -> androidx.compose.foundation.isSystemInDarkTheme()
             }
             
+            // Fix Status Bar Color
+            val view = androidx.compose.ui.platform.LocalView.current
+            if (!view.isInEditMode) {
+                androidx.compose.runtime.SideEffect {
+                    val window = (view.context as android.app.Activity).window
+                    val statusBarColor = if (isDark) {
+                         uiState.themeBackground.toInt() 
+                    } else {
+                         android.graphics.Color.WHITE
+                    }
+                    window.statusBarColor = statusBarColor
+                    androidx.core.view.WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isDark
+                }
+            }
+            
             MaterialTheme(
                 colorScheme = if (isDark) {
                     darkColorScheme(
