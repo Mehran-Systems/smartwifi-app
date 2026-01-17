@@ -28,11 +28,12 @@ data class AppUiState(
     val isGeofencingEnabled: Boolean = false,
     val is5GhzPriorityEnabled: Boolean = true,
     val fiveGhzThreshold: Int = -75, 
-    val minSignalDiff: Int = 10, 
+    val minSignalDiff: Int = 5, 
     val isHotspotSwitchingEnabled: Boolean = false,
     val themeMode: String = "SYSTEM", 
     val themeBackground: Long = 0xFF121212, 
-    val themeAccent: Long = 0xFFBB86FC 
+    val themeAccent: Long = 0xFFBB86FC,
+    val badgeSensitivity: Int = 50 // Separate threshold for visual warning
 )
 
 data class ProbationItem(val bssid: String, val secondsRemaining: Long)

@@ -48,6 +48,62 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .fillMaxSize()
         ) {
+            // -- DEBUG LOGS SECTION --
+            var showLogDialog by remember { mutableStateOf(false) }
+            var logContent by remember { mutableStateOf("") }
+            
+            SettingsCard(title = "Developer Tools") {
+                OutlinedButton(
+                    onClick = { 
+                        logContent = viewModel.getLogs()
+                        showLogDialog = true 
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("View Offline Logs")
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                OutlinedButton(
+                    onClick = { 
+                        viewModel.clearLogs()
+                        Toast.makeText(context, "Logs Cleared", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Clear Logs")
+                }
+            }
+            
+            if (showLogDialog) {
+                // Poll for updates every 1s
+                LaunchedEffect(Unit) {
+                    while(true) {
+                        logContent = viewModel.getLogs()
+                        kotlinx.coroutines.delay(1000)
+                    }
+                }
+                
+                AlertDialog(
+                    onDismissRequest = { showLogDialog = false },
+                    title = { Text("Debug Logs (Live)") },
+                    text = {
+                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                            Text(text = logContent, style = MaterialTheme.typography.bodySmall)
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showLogDialog = false }) {
+                            Text("Close")
+                        }
+                    }
+                )
+            }
+            // -- END DEBUG LOGS SECTION --
+            
+            Spacer(modifier = Modifier.height(24.dp))
             
             Text("Appearance", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(8.dp))
@@ -105,6 +161,23 @@ fun SettingsScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("-90 dBm", style = MaterialTheme.typography.labelSmall)
                     Text("-40 dBm", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Section 1.5: Badge Trigger
+            SettingsCard(title = "Badge Notification Settings") {
+                val badgeDbm = -90 + (uiState.badgeSensitivity / 100f * 50).toInt()
+                Text("Show 'Poor Signal' Badge if: < $badgeDbm dBm")
+                Slider(
+                    value = uiState.badgeSensitivity.toFloat(),
+                    onValueChange = { viewModel.setBadgeSensitivity(it.toInt()) },
+                    valueRange = 0f..100f
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Only Extremely Weak", style = MaterialTheme.typography.labelSmall)
+                    Text("Even Slightly Weak", style = MaterialTheme.typography.labelSmall)
                 }
             }
             

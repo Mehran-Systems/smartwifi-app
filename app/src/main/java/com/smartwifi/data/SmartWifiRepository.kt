@@ -11,10 +11,15 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class SmartWifiRepository @Inject constructor() {
+class SmartWifiRepository @Inject constructor(
+    private val debugger: com.smartwifi.logic.SmartWifiDebugger
+) {
 
     private val _uiState = MutableStateFlow(AppUiState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
+
+    fun getDebugLogs(): String = debugger.getLogContent()
+    fun clearDebugLogs() = debugger.clearLogs()
 
     fun updateServiceStatus(isRunning: Boolean) {
         _uiState.update { it.copy(isServiceRunning = isRunning) }
@@ -80,6 +85,7 @@ class SmartWifiRepository @Inject constructor() {
     fun setThemeMode(mode: String) { _uiState.update { it.copy(themeMode = mode) } }
     fun setThemeColors(bg: Long, accent: Long) { _uiState.update { it.copy(themeBackground = bg, themeAccent = accent) } }
     fun setGeofencing(enabled: Boolean) { _uiState.update { it.copy(isGeofencingEnabled = enabled) } }
+    fun setBadgeSensitivity(value: Int) { _uiState.update { it.copy(badgeSensitivity = value) } }
 
     private val _notificationEvents = kotlinx.coroutines.channels.Channel<String>(kotlinx.coroutines.channels.Channel.BUFFERED)
     val notificationEvents = _notificationEvents.receiveAsFlow()
@@ -100,7 +106,8 @@ class SmartWifiRepository @Inject constructor() {
                 isHotspotSwitchingEnabled = defaults.isHotspotSwitchingEnabled,
                 themeMode = defaults.themeMode,
                 themeBackground = defaults.themeBackground,
-                themeAccent = defaults.themeAccent
+                themeAccent = defaults.themeAccent,
+                badgeSensitivity = defaults.badgeSensitivity
             )
         }
     }

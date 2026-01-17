@@ -35,10 +35,18 @@ class SmartWifiService : Service() {
     @Inject lateinit var debugger: com.smartwifi.logic.SmartWifiDebugger
 
     private val serviceJob = Job()
-    private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
+    // Use a dedicated thread for the service to avoid thread pool suspension issues during screen off
+    private val serviceScope = CoroutineScope(newSingleThreadContext("SmartWifiServiceThread") + serviceJob)
     
     private var currentWifiInfo: WifiInfo? = null
     private val wifiManager by lazy { getSystemService(Context.WIFI_SERVICE) as WifiManager }
+    
+    private val wakeLock: android.os.PowerManager.WakeLock by lazy {
+        (getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).newWakeLock(
+            android.os.PowerManager.PARTIAL_WAKE_LOCK,
+            "SmartWifi::ServiceWakeLock"
+        ).apply { setReferenceCounted(false) }
+    }
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
@@ -54,13 +62,35 @@ class SmartWifiService : Service() {
         }
     }
 
+    // AudioTrack for "Silent Music" trick to prevent Doze
+    private var silentAudioTrack: android.media.AudioTrack? = null
+    
+    private var lastNotificationTime: Long = 0
+
     override fun onCreate() {
         super.onCreate()
+        
+        // Create notification channels and start foreground immediately
+        createNotificationChannel()
+        startForeground(1, createNotification())
+
         userContextMonitor = UserContextMonitor(this)
         mobileMonitor = MobileNetworkMonitor(this)
         
-        createNotificationChannel()
-        startForeground(1, createNotification())
+        // Initialize AudioTrack for silence
+        startSilentAudio()
+        
+        // Acquire WakeLock to keep CPU running during screen off
+        try {
+            if (!wakeLock.isHeld) {
+                wakeLock.acquire()
+                Log.d("SmartWifiService", "Partial WakeLock Acquired")
+            }
+        } catch (e: Exception) {
+            Log.e("SmartWifiService", "Failed to acquire WakeLock", e)
+        }
+        
+        Log.d("SmartWifiService", "Service Created. Scheduling restart watchdog...")
         
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         cm.registerDefaultNetworkCallback(networkCallback)
@@ -78,7 +108,7 @@ class SmartWifiService : Service() {
             override fun onReceive(c: Context?, i: Intent?) {
                 serviceScope.launch(Dispatchers.Main) { 
                     Log.i("SmartWifiService", "DEBUG: Forcing Badge Display")
-                    showBadge() 
+                    showBadge(isWarning = false) 
                 }
             }
         }
@@ -91,7 +121,126 @@ class SmartWifiService : Service() {
         }
         
         monitorSettingsChanges()
+        
+        // AUTO-START LOGIC: Ensure optimization is active
+        repository.updateServiceStatus(true)
         startMonitoring()
+    }
+
+    private fun startSilentAudio() {
+        try {
+            val sampleRate = 44100
+            val buffSize = android.media.AudioTrack.getMinBufferSize(
+                sampleRate, 
+                android.media.AudioFormat.CHANNEL_OUT_MONO, 
+                android.media.AudioFormat.ENCODING_PCM_16BIT
+            )
+            
+            silentAudioTrack = android.media.AudioTrack.Builder()
+                .setAudioAttributes(
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAudioFormat(
+                    android.media.AudioFormat.Builder()
+                        .setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(sampleRate)
+                        .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO)
+                        .build()
+                )
+                .setBufferSizeInBytes(buffSize)
+                .setTransferMode(android.media.AudioTrack.MODE_STATIC)
+                .build()
+
+            val silence = ByteArray(buffSize)
+            silentAudioTrack?.write(silence, 0, silence.size)
+            silentAudioTrack?.setLoopPoints(0, buffSize / 2, -1)
+            silentAudioTrack?.play()
+            Log.d("SmartWifiService", "Silent AudioTrack started for persistence.")
+        } catch (e: Exception) {
+            Log.e("SmartWifiService", "Failed to start Silent Audio", e)
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == "KEEP_ALIVE") {
+            // Just a dummy wake-up call to ensure loop runs
+            Log.d("SmartWifiService", "Keep-Alive Alarm Triggered")
+        } else {
+            Log.d("SmartWifiService", "onStartCommand Executed. Mode: START_STICKY")
+            
+            // Ensure notification is up immediately if system killed and restarted us
+            startForeground(1, createNotification())
+            
+            // If the service was killed/restarted, ensure we resume monitoring
+            if (!serviceScope.isActive) {
+                 Log.w("SmartWifiService", "Service restarted by system.")
+            }
+        }
+        
+        return START_STICKY
+    }
+
+    private fun scheduleHeartbeat() {
+        val intent = Intent(this, SmartWifiService::class.java).apply { action = "KEEP_ALIVE" }
+        val pendingIntent = android.app.PendingIntent.getService(
+            this, 999, intent, 
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+        
+        // Schedule for 5 seconds in future to forcefully wake up Doze
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                 if (alarmManager.canScheduleExactAlarms()) {
+                     alarmManager.setExactAndAllowWhileIdle(
+                        android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        android.os.SystemClock.elapsedRealtime() + 5000,
+                        pendingIntent
+                    )
+                 } else {
+                     Log.w("SmartWifiService", "Permission 'SCHEDULE_EXACT_ALARM' denied. Falling back to Inexact Alarm.")
+                     alarmManager.setAndAllowWhileIdle(
+                        android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        android.os.SystemClock.elapsedRealtime() + 5000,
+                        pendingIntent
+                    )
+                 }
+            } else {
+                 alarmManager.setExactAndAllowWhileIdle(
+                    android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    android.os.SystemClock.elapsedRealtime() + 5000,
+                    pendingIntent
+                )
+            }
+        } catch (e: SecurityException) {
+            Log.e("SmartWifiService", "SecurityException: Failed to schedule alarm. Permission missing.", e)
+        } catch (e: Exception) {
+            Log.e("SmartWifiService", "Failed to schedule heartbeat alarm", e)
+        }
+    }
+        
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.w("SmartWifiService", "onTaskRemoved: Application removed from Recents. Scheduling Restart...")
+
+        val restartServiceIntent = Intent(applicationContext, SmartWifiService::class.java).also {
+            it.setPackage(packageName)
+        }
+        
+        val restartServicePendingIntent = android.app.PendingIntent.getService(
+            this, 1, restartServiceIntent,
+            android.app.PendingIntent.FLAG_ONE_SHOT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        
+        val alarmService = applicationContext.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+        alarmService.set(
+            android.app.AlarmManager.ELAPSED_REALTIME,
+            android.os.SystemClock.elapsedRealtime() + 1000,
+            restartServicePendingIntent
+        )
     }
     
     private fun createNotificationChannel() {
@@ -152,21 +301,33 @@ class SmartWifiService : Service() {
     private fun monitorSettingsChanges() {
         serviceScope.launch {
             repository.uiState
-                .map { Triple(it.sensitivity, it.fiveGhzThreshold, it.minSignalDiff) }
+                .map { StateTuple(it.sensitivity, it.fiveGhzThreshold, it.minSignalDiff, it.badgeSensitivity) }
                 .distinctUntilChanged()
-                .collect { (sens, fiveG, roam) ->
-                    debugger.logSettingsChange("Sensitivity: $sens, 5GHz Threshold: $fiveG, Roaming Diff: $roam")
-                    Log.i("SmartWifiService", "Settings Applied: Threshold=$sens, 5G_Min=$fiveG, RoamTrigger=$roam")
+                .collect { (sens, fiveG, roam, badgeSens) ->
+                    val badgeThresholdDbm = -90 + (badgeSens / 100f * 50).toInt()
+                    val sensitivityDbm = -90 + (sens / 100f * 50).toInt()
+                    
+                    debugger.logSettingsChange("Sensitivity: $sens ($sensitivityDbm dBm), BadgeSens: $badgeSens ($badgeThresholdDbm dBm), 5GHz Threshold: $fiveG, Roaming Diff: $roam")
+                    Log.i("SmartWifiService", "Settings Applied: SwitchThreshold=$sensitivityDbm dBm (Slider: $sens), BadgeThreshold=$badgeThresholdDbm dBm (Slider: $badgeSens), 5G_Min=$fiveG, RoamTrigger=$roam")
                 }
         }
     }
+    
+    // Helper data class for observing multiple state fields
+    private data class StateTuple(val sens: Int, val fiveG: Int, val roam: Int, val badgeSens: Int)
 
     // --- Floating Badge Logic ---
     private var badgeView: android.view.View? = null
     private val windowManager by lazy { getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager }
 
-    private fun showBadge() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)) {
+    private fun showBadge(isWarning: Boolean = false) {
+        val canDraw = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) 
+            android.provider.Settings.canDrawOverlays(this) 
+        else true
+
+        Log.d("SmartWifiService", "showBadge() called. isWarning=$isWarning, canDrawOverlays=$canDraw, alreadyShowing=${badgeView != null}")
+
+        if (!canDraw) {
             Log.w("SmartWifiService", "Cannot show badge: Overlay permission missing")
             return
         }
@@ -192,12 +353,12 @@ class SmartWifiService : Service() {
 
             // Create Programmatic View (Simple semi-transparent icon)
             val icon = android.widget.ImageView(this).apply {
-                setImageResource(android.R.drawable.ic_dialog_info) // Fallback icon, acts as indicator
-                // We'd ideally use a wifi vector, but system drawable is safe for now.
-                // Or we can load R.drawable.ic_stat_name if available or create a shape.
-                // Let's use a standard system icon for WiFi if possible, or generic.
+                // Use our new WiFi Vector Icon
+                setImageResource(com.smartwifi.R.drawable.ic_badge_wifi)
+                
                 // Using a color filter to make it look "Active"
-                setColorFilter(android.graphics.Color.parseColor("#4CAF50")) 
+                val color = if (isWarning) android.graphics.Color.parseColor("#FF9800") else android.graphics.Color.parseColor("#4CAF50")
+                setColorFilter(color) 
                 setBackgroundColor(android.graphics.Color.parseColor("#CCFFFFFF")) // Semi-transparent white bg
                 setPadding(20, 20, 20, 20)
                 
@@ -205,15 +366,21 @@ class SmartWifiService : Service() {
                 background = android.graphics.drawable.GradientDrawable().apply {
                      shape = android.graphics.drawable.GradientDrawable.OVAL
                      setColor(android.graphics.Color.parseColor("#E0FFFFFF"))
-                     setStroke(2, android.graphics.Color.parseColor("#4CAF50"))
+                     setStroke(2, color)
                 }
                 
+                // USER REQUEST: Increase Badge Size
+                setPadding(35, 35, 35, 35) // Increased from 20 to 35 for larger touch area
+                
                 setOnClickListener {
-                     // Launch Panel Intent using PendingIntent to bypass background start restrictions
+                     // Launch Panel Intent
                      try {
-                         val intent = Intent(context, com.smartwifi.ui.MainActivity::class.java).apply {
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                            putExtra("OPEN_PANEL", true)
+                         // USER REQUEST: Open Internet Panel DIRECTLY (Skip App Main Activity)
+                         val intent = Intent(android.provider.Settings.Panel.ACTION_INTERNET_CONNECTIVITY).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        }
+                        if (intent.resolveActivity(packageManager) == null) {
+                            intent.action = android.provider.Settings.ACTION_WIFI_SETTINGS
                         }
                         
                         val pendingIntent = android.app.PendingIntent.getActivity(
@@ -221,7 +388,7 @@ class SmartWifiService : Service() {
                             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
                         )
                         
-                        val options = if (android.os.Build.VERSION.SDK_INT >= 34) { // Android 14 (UpsideDownCake)
+                        val options = if (android.os.Build.VERSION.SDK_INT >= 34) { 
                             android.app.ActivityOptions.makeBasic().apply {
                                 setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
                             }.toBundle()
@@ -233,7 +400,6 @@ class SmartWifiService : Service() {
                         hideBadge() // Auto hide on click
                      } catch (e: Exception) {
                          Log.e("SmartWifiService", "Failed to launch intent from badge", e)
-                         // Fail gracefully with a toast
                          android.widget.Toast.makeText(context, "Tap Notification to switch", android.widget.Toast.LENGTH_SHORT).show()
                      }
                 }
@@ -242,10 +408,18 @@ class SmartWifiService : Service() {
             badgeView = icon
             windowManager.addView(badgeView, params)
             
-            // Auto-hide after 15 seconds
+            // SLIDE IN ANIMATION
+            icon.translationX = 300f // Start off-screen (right)
+            icon.animate()
+                .translationX(0f)
+                .setDuration(400)
+                .setInterpolator(android.view.animation.DecelerateInterpolator())
+                .start()
+            
+            // Auto-hide after 15 seconds (with slide out)
             serviceScope.launch {
                 delay(15000)
-                hideBadge()
+                withContext(Dispatchers.Main) { hideBadge() }
             }
             
         } catch (e: Exception) {
@@ -255,8 +429,20 @@ class SmartWifiService : Service() {
 
     private fun hideBadge() {
         try {
-            if (badgeView != null) {
-                windowManager.removeView(badgeView)
+            val view = badgeView
+            if (view != null) {
+                // SLIDE OUT ANIMATION
+                view.animate()
+                    .translationX(300f) // Slide out to right
+                    .setDuration(300)
+                    .setInterpolator(android.view.animation.AccelerateInterpolator())
+                    .withEndAction {
+                        try {
+                            windowManager.removeView(view)
+                        } catch(e: Exception) {}
+                    }
+                    .start()
+                    
                 badgeView = null
             }
         } catch (e: Exception) {
@@ -336,21 +522,59 @@ class SmartWifiService : Service() {
                 // FORCED HEARTBEAT: Call optimization every loop
                 performSmartOptimization()
 
-                val loopDelay = 2000L
+                val loopDelay = 3000L // Fast 3-second heartbeat for continuous scanning
                 
                 // Aggressive Monitoring: Check often to beat the OS switcher
-                // Android throttles scans to 4 times per 2 mins (approx every 30s) for foreground apps.
-                // However, we can try to be as frequent as allowed.
-                // Reducing gap to 6 seconds (loopCount % 3).
-                if (loopCount % 3 == 0 && signalMonitor.isWifiEnabled()) {
-                    actionManager.startScan()
-                    debugger.logDecision("Heartbeat: Requesting Scan...")
-                }
+                // Did not use % 3 check anymore to scan continuously.
+                
+                     // Log details every loop (3 seconds)
+                     val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                     val isWhitelisted = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) 
+                        pm.isIgnoringBatteryOptimizations(packageName) 
+                     else true
+                     
+                     if (info != null) {
+                        val scanResults = actionManager.getScanResults()
+                        val topNetworks = scanResults.take(3).joinToString { "${it.SSID}(${it.level})" }
+                        val log1 = "Current: SSID='${info.ssid}', RSSI=${info.rssi}dBm. (WakeLock: ${wakeLock.isHeld})"
+                        val log2 = "Visible: Found ${scanResults.size}. Top: $topNetworks"
+                        
+                        Log.i("SmartWifiService", log1)
+                        Log.i("SmartWifiService", log2)
+                        debugger.logDecision(log1)
+                        debugger.logDecision(log2)
+                     } else {
+                        val scanResults = actionManager.getScanResults()
+                        val topNetworks = scanResults.take(3).joinToString { "${it.SSID}(${it.level})" }
+                        val log1 = "Current: Disconnected. (WakeLock: ${wakeLock.isHeld})"
+                        val log2 = "Visible: Found ${scanResults.size}. Top: $topNetworks"
+                        
+                        Log.i("SmartWifiService", log1)
+                        Log.i("SmartWifiService", log2)
+                        debugger.logDecision(log1)
+                        debugger.logDecision(log2)
+                     }
+
+                     if (signalMonitor.isWifiEnabled()) {
+                        val accepted = actionManager.startScan()
+                        debugger.logDecision("Heartbeat: Requesting Scan... Accepted=$accepted")
+                        if (!accepted) {
+                            Log.w("SmartWifiService", "WARNING: Scan Throttled by OS. (Background: ${!isWhitelisted})")
+                        }
+                     }
 
                 lastRx = currentRx
                 lastTx = currentTx
                 loopCount++
-                delay(loopDelay)
+                
+                // Nuclear Option: Schedule an alarm to wake us up in 5s if we die
+                scheduleHeartbeat()
+                
+                try {
+                    Thread.sleep(loopDelay) 
+                } catch (e: InterruptedException) {
+                    Log.d("SmartWifiService", "Loop sleep interrupted")
+                }
             }
         }
     }
@@ -413,7 +637,7 @@ class SmartWifiService : Service() {
         val settings = repository.uiState.value
         if (!settings.isServiceRunning) {
              // Throttled logging could be better, but for debugging we want to know
-             // debugger.logDecision("Optimization Skipped: Service is paused") 
+             debugger.logDecision("Optimization Skipped: Service is paused") 
              return
         }
         if (settings.isGamingMode) {
@@ -435,10 +659,13 @@ class SmartWifiService : Service() {
         
         val currentRssi = info.rssi
         val thresholdDbm = -90 + (settings.sensitivity / 100f * 50).toInt()
+        val badgeThresholdDbm = -90 + (settings.badgeSensitivity / 100f * 50).toInt()
         
         var bestCandidate: android.net.wifi.ScanResult? = null
         var statusMsg = "Monitoring..."
+        // Restore variable definitions used in else block
         val isPoorSignal = currentRssi < thresholdDbm
+        val isBadgeWarning = currentRssi < badgeThresholdDbm
         val candidates = mutableListOf<android.net.wifi.ScanResult>()
 
         for (scan in results) {
@@ -446,36 +673,32 @@ class SmartWifiService : Service() {
             
             val is5Ghz = scan.frequency > 4900
             val isCurrent24 = info.frequency < 4900
+            val isCurrent5G = info.frequency > 4900
             
-            val scanSsid = scan.SSID.replace("\"", "")
-            val currentSsid = info.ssid.replace("\"", "")
+            // 5GHz Strategy: Prefer 5GHz unless it's very weak
+            var requiredDiff = settings.minSignalDiff
             
-            // Lenient Matching (Allow switch even if names are masked)
-            val isSameNetwork = scanSsid.equals(currentSsid, ignoreCase = true) || 
-                               scan.BSSID.take(8).equals(info.bssid.take(8), ignoreCase = true) ||
-                               currentSsid == "<unknown ssid>"
+            if (isCurrent5G && !is5Ghz) {
+                // Downgrade Penalty: Harder to switch from 5G -> 2.4G
+                requiredDiff += 15 
+            } else if (isCurrent24 && is5Ghz) {
+                // Upgrade Bonus: Always prefer 5G if it's usable
+                // USER FIX: Aggressively suggest 5G. Even if it's 5dB WEAKER than current 2.4G, it's likely better.
+                requiredDiff = -5 
+            }
 
-            if (!isSameNetwork) continue
-
+            // Evaluation
+            if (scan.level >= (currentRssi + requiredDiff)) {
+                 // Check if this is the "Best" so far in this loop
+                 if (bestCandidate == null || scan.level > bestCandidate.level) {
+                     bestCandidate = scan
+                     statusMsg = if (is5Ghz) "Better 5G Found: ${scan.SSID}" else "Stronger Signal Found: ${scan.SSID}"
+                 }
+            }
+            
             // Collect better networks for OS Batch Suggestion
-            if (scan.level > currentRssi || (scan.frequency > 4900 && scan.level > -80)) {
+            if (scan.level > currentRssi || (is5Ghz && scan.level > -80)) {
                  candidates.add(scan)
-                 debugger.logDecision("Candidate added for batch: ${scan.SSID} (Level: ${scan.level})")
-            }
-
-            // 1. 5G Priority check
-            if (settings.is5GhzPriorityEnabled && isCurrent24 && is5Ghz && scan.level >= settings.fiveGhzThreshold) {
-                bestCandidate = scan
-                statusMsg = "Better 5G Found: ${scan.SSID}"
-                break 
-            }
-
-            // 2. Roaming trigger
-            if (isPoorSignal && scan.level >= (currentRssi + settings.minSignalDiff)) {
-                if (bestCandidate == null || scan.level > bestCandidate.level) {
-                    bestCandidate = scan
-                    statusMsg = "Stronger Signal Found: ${scan.SSID}"
-                }
             }
         }
 
@@ -488,19 +711,25 @@ class SmartWifiService : Service() {
             debugger.logUserSuggestion(bestCandidate.SSID, statusMsg)
             Log.i("SmartWifiService", "USER PROMPT: Suggesting switch to ${bestCandidate.SSID} (${bestCandidate.BSSID}) because: $statusMsg")
             
-            // IMMEDIATE USER PROMPT
-            // Show notification immediately so user sees it before or while OS is deciding
-            serviceScope.launch {
-                 debugger.logDecision("Found better network. Prompting User for ${bestCandidate.SSID} immediately.")
-                 showSwitchNotification(bestCandidate.SSID)
-                 
-                 // Show Floating Badge (System-Wide Overlay)
-                 withContext(Dispatchers.Main) {
-                     showBadge()
-                 }
+            // Show Floating Badge (System-Wide Overlay) - ALWAYS show/update visual
+            serviceScope.launch(Dispatchers.Main) {
+                 showBadge(isWarning = false)
+            }
+
+            // Notification Throttling (Avoid Noise Spam)
+            val now = System.currentTimeMillis()
+            if (now - lastNotificationTime > 15000) { // Max 1 beep every 15s
+                lastNotificationTime = now
+                serviceScope.launch {
+                     showSwitchNotification(bestCandidate.SSID)
+                }
+            } else {
+                debugger.logDecision("Notification sound throttled (too frequent)")
+            }
                  
                  // Trigger In-App Snackbar
-                 repository.sendNotificationEvent("Better Network Detected: ${bestCandidate.SSID}. Tap to Switch!")
+                 serviceScope.launch {
+                     repository.sendNotificationEvent("Better Network Detected: ${bestCandidate.SSID}. Tap to Switch!")
 
                  repository.setPendingSwitch(AvailableNetworkItem(
                     ssid = bestCandidate.SSID.replace("\"", ""),
@@ -515,6 +744,21 @@ class SmartWifiService : Service() {
         } else {
             val label = if (isPoorSignal) "Signal Weak ($currentRssi < $thresholdDbm). Searching..." else "Signal Optimal ($currentRssi dBm)"
             repository.updateLastAction(label)
+            
+            // If signal is poor (based on badge threshold), show the badge as a warning
+            
+            Log.d("SmartWifiService", "Badge Logic Check: Current RSSI=$currentRssi, Badge Threshold=$badgeThresholdDbm (Sens: ${settings.badgeSensitivity}), isWarning=$isBadgeWarning")
+            
+            if (isBadgeWarning) {
+                 serviceScope.launch(Dispatchers.Main) {
+                     // Check if not already showing to avoid spamming logic (though showBadge handles null check)
+                     Log.i("SmartWifiService", "Signal Degraded for Badge ($currentRssi < $badgeThresholdDbm). Triggering showBadge(true).")
+                     showBadge(isWarning = true)
+                 }
+            } else {
+                 // Optional: Hide badge if signal improves (auto-hide logic is currently timeout-based, but we could add explicit hide here)
+                 // hideBadge() 
+            }
         }
     }
 
@@ -522,6 +766,21 @@ class SmartWifiService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        serviceJob.cancel()
+        
+        try {
+            silentAudioTrack?.stop()
+            silentAudioTrack?.release()
+        } catch (e: Exception) {
+            Log.e("SmartWifiService", "Failed to release AudioTrack", e)
+        }
+
+        try {
+            if (wakeLock.isHeld) {
+                wakeLock.release()
+                Log.d("SmartWifiService", "Partial WakeLock Released")
+            }
+        } catch (e: Exception) {
+            Log.e("SmartWifiService", "Failed to release WakeLock", e)
+        }
     }
 }

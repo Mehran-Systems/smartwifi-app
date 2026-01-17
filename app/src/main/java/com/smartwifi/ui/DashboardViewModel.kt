@@ -110,4 +110,8 @@ class DashboardViewModel @Inject constructor(
     fun setThemeColors(bg: Long, accent: Long) { repository.setThemeColors(bg, accent) }
     fun resetSettings() { repository.resetToDefaults() }
     fun setHotspotSwitchingEnabled(enabled: Boolean) { repository.setHotspotSwitchingEnabled(enabled) }
+    fun setBadgeSensitivity(value: Int) { repository.setBadgeSensitivity(value) }
+
+    fun getLogs(): String = repository.getDebugLogs()
+    fun clearLogs() = repository.clearDebugLogs()
 }

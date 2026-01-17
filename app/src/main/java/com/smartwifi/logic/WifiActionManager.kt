@@ -25,9 +25,11 @@ class WifiActionManager @Inject constructor(
         return ssid.replace("\"", "")
     }
 
-    fun startScan() {
+    fun startScan(): Boolean {
         @Suppress("DEPRECATION")
-        wifiManager.startScan()
+        val success = wifiManager.startScan()
+        Log.d("WifiActionManager", "Scan Request Sent. Accepted by OS: $success")
+        return success
     }
 
     private fun calculatePriority(scan: android.net.wifi.ScanResult): Int {
