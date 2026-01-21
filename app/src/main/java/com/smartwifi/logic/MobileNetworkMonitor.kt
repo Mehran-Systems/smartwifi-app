@@ -6,6 +6,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import android.util.Log
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 
 @Singleton
 class MobileNetworkMonitor @Inject constructor(
@@ -13,11 +15,9 @@ class MobileNetworkMonitor @Inject constructor(
 ) {
     private val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
     private val subscriptionManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as android.telephony.SubscriptionManager
+    private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     
-    // Cache for latest signal strength (dBm)
     private var cachedSignalDbm: Int = -100
-    
-    // Cache for latest network type override (e.g., 4G+)
     private var cachedDisplayOverride: Int = 0
 
     init {
@@ -27,7 +27,6 @@ class MobileNetworkMonitor @Inject constructor(
     private fun registerListeners() {
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                // API 31+
                 telephonyManager.registerTelephonyCallback(
                     context.mainExecutor,
                     object : android.telephony.TelephonyCallback(), 
@@ -43,8 +42,7 @@ class MobileNetworkMonitor @Inject constructor(
                         }
                     }
                 )
-            } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                // API 30 (Android 11)
+            } else {
                 @Suppress("DEPRECATION")
                 telephonyManager.listen(object : android.telephony.PhoneStateListener() {
                     override fun onSignalStrengthsChanged(signalStrength: android.telephony.SignalStrength) {
@@ -57,39 +55,20 @@ class MobileNetworkMonitor @Inject constructor(
                         cachedDisplayOverride = telephonyDisplayInfo.overrideNetworkType
                     }
                 }, android.telephony.PhoneStateListener.LISTEN_SIGNAL_STRENGTHS or android.telephony.PhoneStateListener.LISTEN_DISPLAY_INFO_CHANGED)
-            } else {
-                // API < 30: Legacy
-                @Suppress("DEPRECATION")
-                telephonyManager.listen(object : android.telephony.PhoneStateListener() {
-                     override fun onSignalStrengthsChanged(signalStrength: android.telephony.SignalStrength) {
-                        super.onSignalStrengthsChanged(signalStrength)
-                        cachedSignalDbm = getDbmFromSignalStrength(signalStrength)
-                    }
-                }, android.telephony.PhoneStateListener.LISTEN_SIGNAL_STRENGTHS)
             }
-        } catch (e: SecurityException) {
-            Log.e("MobileNetworkMonitor", "Permission failed for listener", e)
         } catch (e: Exception) {
             Log.e("MobileNetworkMonitor", "Error registering listener", e)
         }
     }
 
     private fun getDbmFromSignalStrength(signalStrength: android.telephony.SignalStrength): Int {
-        // Simple logic: Try to get LTE, then NR (5G), then others.
-        // In a real app we'd check the active data network first.
-        // For brevity, we try to grab the first valid readable level.
-        
-        // Reflection or string parsing is sometimes needed for old APIs, 
-        // but let's stick to standard CellSignalStrength if possible (API 29+)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
              signalStrength.cellSignalStrengths.forEach { 
                  val dbm = it.dbm
-                 if (dbm < 0 && dbm > -140) return dbm // valid range
+                 if (dbm < 0 && dbm > -140) return dbm
              }
         }
-        // Fallback or legacy handling could go here. 
-        // If we can't extract, map level 0-4 to dBm approximation
-        val level = signalStrength.level // 0..4
+        val level = signalStrength.level 
         return when (level) {
             4 -> -65
             3 -> -85
@@ -99,17 +78,46 @@ class MobileNetworkMonitor @Inject constructor(
         }
     }
 
+    fun getLinkSpeed(): Int {
+        try {
+            // Calculate a baseline estimation based on Signal Quality (-140 to -50)
+            // Range shifted to be more optimistic as requested: 100% at -90dBm
+            val signalFactor = ((cachedSignalDbm + 140).toFloat() / 50f).coerceIn(0f, 1f)
+            
+            val maxTheoreticalMbps = when (getNetworkType()) {
+                "5G" -> 1000
+                "4.5G" -> 300
+                "4G" -> 150
+                "3G" -> 42
+                else -> 50
+            }
+
+            val estimatedCapacity = (maxTheoreticalMbps * signalFactor).toInt()
+
+            // Try to get system reported bandwidth
+            val network = connectivityManager.activeNetwork
+            val caps = connectivityManager.getNetworkCapabilities(network)
+            val systemBandwidth = if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                caps.linkDownstreamBandwidthKbps / 1000
+            } else 0
+
+            // Use the higher value: if the system under-reports but the technology/signal is good, show the capacity.
+            // If the system reports a high value, use that.
+            return maxOf(estimatedCapacity, systemBandwidth).coerceAtLeast(1)
+            
+        } catch (e: Exception) {
+            return 10 // Safe fallback
+        }
+    }
+
     fun getCarrierName(): String {
         return try {
-            // ... (Existing Dual SIM logic logic matches here or needs to be retained) ...
-            // 1. Try to get Active Data Subscription ID
             val activeSubId = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
                 android.telephony.SubscriptionManager.getDefaultDataSubscriptionId()
             } else {
                 -1
             }
 
-            // 2. If valid ID, try to find matching SubscriptionInfo
             if (activeSubId != -1) {
                 val activeInfo = subscriptionManager.activeSubscriptionInfoList?.find { it.subscriptionId == activeSubId }
                 if (activeInfo != null) {
@@ -135,13 +143,12 @@ class MobileNetworkMonitor @Inject constructor(
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
                  val networkType = telephonyManager.dataNetworkType
                  
-                 // Check for 4.5G / 5G+ overrides first
                  if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                      when (cachedDisplayOverride) {
                          android.telephony.TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_ADVANCED_PRO,
                          android.telephony.TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_CA -> return "4.5G"
                          android.telephony.TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA,
-                         android.telephony.TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE -> return "5G" // 5G NSA
+                         android.telephony.TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE -> return "5G"
                      }
                  }
 
@@ -153,13 +160,11 @@ class MobileNetworkMonitor @Inject constructor(
                      TelephonyManager.NETWORK_TYPE_UMTS -> "3G"
                      TelephonyManager.NETWORK_TYPE_EDGE,
                      TelephonyManager.NETWORK_TYPE_GPRS -> "2G"
-                     else -> "Mobile Data"
+                     else -> "4G"
                  }
             } else {
-                "Mobile Data"
+                "4G"
             }
-        } catch (e: SecurityException) {
-            "Mobile"
         } catch (e: Exception) {
             "Mobile"
         }

@@ -48,4 +48,13 @@ class SignalMonitor @Inject constructor(
     fun isSignificantlyBetter(newRssi: Int, currentRssi: Int, threshold: Int = 10): Boolean {
         return newRssi > (currentRssi + threshold)
     }
+    // Check if the current network is Metered (e.g. Hotspot)
+    fun isMeteredNetwork(): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        // NET_CAPABILITY_NOT_METERED means it is NOT metered.
+        // If it lacks this capability, it IS metered.
+        return !caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+    }
 }

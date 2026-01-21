@@ -1,15 +1,16 @@
 package com.smartwifi.ui
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
@@ -18,288 +19,401 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
-import kotlinx.coroutines.launch
-import androidx.compose.ui.graphics.drawscope.Stroke
 import com.smartwifi.data.model.ConnectionSource
-import com.smartwifi.ui.LiquidRadar
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     onSettingsClick: () -> Unit,
     onSpeedTestClick: () -> Unit,
+    onMenuClick: () -> Unit,
+    shouldOpenDialog: Boolean = false,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val showStartupDialog by viewModel.showStartupDialog.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val density = LocalDensity.current
+    val snackbarHostState = remember { SnackbarHostState() }
     
-    // Animation for Radar
-    val infiniteTransition = rememberInfiniteTransition(label = "Radar")
-    val radarScale by infiniteTransition.animateFloat(
-        initialValue = 0.8f,
-        targetValue = 1.2f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "RadarScale"
-    )
-
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
-
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet {
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "Smart WiFi", 
-                    modifier = Modifier.padding(16.dp), 
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Divider()
-                NavigationDrawerItem(
-                    label = { Text(text = "Speed Test") },
-                    selected = false,
-                    onClick = { 
-                        scope.launch { drawerState.close() }
-                        onSpeedTestClick()
-                    },
-                    icon = { Icon(Icons.Default.Speed, contentDescription = null) },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-                 NavigationDrawerItem(
-                    label = { Text(text = "Settings") },
-                    selected = false,
-                    onClick = { 
-                        scope.launch { drawerState.close() }
-                        onSettingsClick()
-                    },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-            }
+    // Trigger from navigation
+    LaunchedEffect(shouldOpenDialog) {
+        if (shouldOpenDialog) {
+            // Wait for UI to settle before launching secondary activity (Panel)
+            // This prevents "flash and vanish" issues where the OS blocks immediate redirects
+            delay(1000) 
+            viewModel.showAvailableNetworks()
         }
-    ) {
-        Scaffold(
-            topBar = {
-                // Simple Top Bar for Menu
-                CenterAlignedTopAppBar(
-                    title = { Text("Dashboard") },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu")
-                        }
-                    }
-                )
-            }
-        ) { padding ->
-            Column(
-                modifier = Modifier
-                    .padding(padding)
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Top
-            ) {
-                Spacer(modifier = Modifier.height(16.dp)) // Reduced 32->16
-                
-                // --- Radar Visual (Principal Focus) ---
-                val compass by viewModel.compassHeading.collectAsState()
-                val target by viewModel.targetBearing.collectAsState()
-                
-                // Calculate Relative Bearing for Pull
-                // If Target is 90 (East) and Compass is 0 (North), Pull is 90 (Right).
-                // If Target is 90 (East) and Compass is 90 (East), Pull is 0 (Up/Forward).!!
-                // Wait. Liquid Radar draws relative to screen "Top".
-                // If phone points North (0), and Target is East (90).
-                // We want the pull to be to the Right relative to the phone screen.
-                // Relative = Target - Compass. 
-                // Ex: 90 - 0 = 90 (Right). Correct.
-                // Ex: 90 - 90 = 0 (Up). Correct.
-                
-                val relativePull = target?.let { 
-                    var diff = it - compass // e.g. Target 90 - Compass 0 = 90
-                    if (diff < 0) diff += 360
-                    diff
-                }
+    }
+    
+    var popupState by remember { mutableStateOf(false) }
+    var contentVisible by remember { mutableStateOf(false) }
 
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(260.dp) // Reduced 320->260
-                ) {
-                    // Replaced Outer Ripple with Liquid Radar
-                    LiquidRadar(
-                        modifier = Modifier.fillMaxSize(),
-                        blobColor = getRadarColor(uiState.internetStatus),
-                        pullBearing = relativePull,
-                        pullStrength = 1.0f // Full strength if target exists
-                    )
-                    
-                    // Main Circle (Inner Content)
+    // Listen for Panel Open Requests
+    LaunchedEffect(Unit) {
+        viewModel.openPanelEvent.collect {
+             try {
+                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                     // Reverting to the "Internet Panel" as requested by user.
+                     // usage: Settings.Panel.ACTION_INTERNET_CONNECTIVITY
+                     val panelIntent = android.content.Intent(android.provider.Settings.Panel.ACTION_INTERNET_CONNECTIVITY).apply {
+                         addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                     }
+                     context.startActivity(panelIntent)
+                 } else {
+                     val wifiIntent = android.content.Intent(android.provider.Settings.ACTION_WIFI_SETTINGS).apply {
+                         addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                     }
+                     context.startActivity(wifiIntent)
+                 }
+             } catch (e: Exception) {
+                 // Prevent crash if activity launch fails
+             }
+        }
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Dashboard") },
+                navigationIcon = {
+                    IconButton(onClick = onMenuClick) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
+                    }
+                },
+                actions = {
                     Box(
-                        modifier = Modifier
-                            .size(170.dp) // Reduced 200->170
-                            .clip(CircleShape)
-                            // Transparent background to see liquid? Or semi-opaque
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
-                            // .border(4.dp, getRadarColor(uiState.internetStatus).copy(alpha=0.5f), CircleShape) // Optional border
-                            ,
+                        modifier = Modifier.wrapContentSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "Status",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        IconButton(onClick = { 
+                            viewModel.toggleGamingMode() 
+                            popupState = true
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Gamepad,
+                                contentDescription = "Gaming Mode",
+                                tint = if (uiState.isGamingMode) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                             
-                            Spacer(modifier = Modifier.height(4.dp)) // Reduced 8->4
-                            
-                            // Dynamic Icon Logic
-                            val connectionSource = uiState.connectionSource
-                            when (connectionSource) {
-                                ConnectionSource.MOBILE_DATA -> {
-                                    Icon(
-                                        imageVector = getMobileSignalIcon(uiState.signalStrength),
-                                        contentDescription = "Mobile Data",
-                                        modifier = Modifier.size(48.dp), // Reduced 64->48
-                                        tint = getRadarColor(uiState.internetStatus)
-                                    )
-                                }
-                                else -> {
-                                    Icon(
-                                        imageVector = getWifiSignalIcon(uiState.signalStrength),
-                                        contentDescription = "WiFi",
-                                        modifier = Modifier.size(48.dp), // Reduced 64->48
-                                        tint = getRadarColor(uiState.internetStatus)
-                                    )
+                        }
+                        
+                        if (popupState) {
+                            Popup(
+                                alignment = Alignment.BottomCenter,
+                                offset = with(density) { IntOffset(0, 56.dp.roundToPx()) },
+                                properties = PopupProperties(focusable = false)
+                            ) {
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = contentVisible,
+                                    enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
+                                    exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top)
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.inverseSurface,
+                                        shadowElevation = 8.dp,
+                                        modifier = Modifier
+                                            .padding(horizontal = 16.dp)
+                                            .widthIn(max = 260.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = if (uiState.isGamingMode) Icons.Default.SportsEsports else Icons.Default.AutoMode,
+                                                contentDescription = null,
+                                                tint = if (uiState.isGamingMode) Color(0xFF4CAF50) else Color.White,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text(
+                                                text = if (uiState.isGamingMode) 
+                                                    "Gaming Mode: ON\nNetwork switching paused" 
+                                                else 
+                                                    "Gaming Mode: OFF\nAuto-optimization active",
+                                                color = MaterialTheme.colorScheme.inverseOnSurface,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                lineHeight = 16.sp
+                                            )
+                                        }
+                                    }
                                 }
                             }
-                            
-                            Spacer(modifier = Modifier.height(8.dp)) // Reduced 16->8
-                            
-                            Text(
-                                text = if (connectionSource == ConnectionSource.MOBILE_DATA) uiState.currentSsid else uiState.currentSsid.replace("\"", ""),
-                                style = MaterialTheme.typography.headlineSmall, // Reduced HeadlineMedium->HeadlineSmall
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Text(
-                                text = uiState.internetStatus, 
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (uiState.internetStatus == "Connected") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                            )
                         }
                     }
                 }
-                
-                Spacer(modifier = Modifier.height(16.dp)) // Reduced 32->16
-
-                // --- Triangle Status Bar (Restored) ---
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    StatusIcon(
-                        icon = Icons.Rounded.Router,
-                        label = "Router",
-                        isActive = uiState.connectionSource == ConnectionSource.WIFI_ROUTER
-                    )
-                    StatusIcon(
-                        icon = Icons.Rounded.WifiTethering,
-                        label = "Hotspot",
-                        isActive = uiState.connectionSource == ConnectionSource.WIFI_HOTSPOT
-                    )
-                    StatusIcon(
-                        icon = Icons.Rounded.SignalCellularAlt,
-                        label = "Mobile",
-                        isActive = uiState.connectionSource == ConnectionSource.MOBILE_DATA
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp)) // Reduced 24->16
-        
-                // --- Network Speed (Link Speed / Usage) ---
-                Card(
-                   modifier = Modifier.fillMaxWidth(),
-                   colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp).fillMaxWidth(), // Padding 16->12
-                        horizontalArrangement = Arrangement.SpaceAround,
-                        verticalAlignment = Alignment.CenterVertically
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Top
+        ) {
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // --- SWITCH PROMPT ---
+            androidx.compose.animation.AnimatedVisibility(
+                visible = uiState.pendingSwitchNetwork != null,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                uiState.pendingSwitchNetwork?.let { network ->
+                    // THEME FIX: Check APP SETTING first, then System Theme
+                    val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+                    val isDark = when (uiState.themeMode) {
+                        "LIGHT" -> false
+                        "DARK" -> true
+                        else -> isSystemDark
+                    }
+                    
+                    val cardBg = if (isDark) Color(0xFF1E1E1E) else Color.White
+                    val titleColor = if (isDark) Color.White else Color.Black
+                    val bodyColor = if (isDark) Color.Gray else Color.DarkGray
+                    
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                        colors = CardDefaults.cardColors(containerColor = cardBg), 
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.5f)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                     ) {
-                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                             Text("Link Speed", style = MaterialTheme.typography.labelMedium)
-                             Text(
-                                 text = "${uiState.linkSpeed} Mbps", 
-                                 style = MaterialTheme.typography.titleMedium, // Reduced TitleLarge->TitleMedium
-                                 fontWeight = FontWeight.Bold,
-                                 color = MaterialTheme.colorScheme.primary
-                             )
-                         }
-                         
-                         Box(modifier = Modifier.width(1.dp).height(32.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.2f))) // Height 40->32
-        
-                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                             Text("Current Usage", style = MaterialTheme.typography.labelMedium)
-                             Text(
-                                 text = uiState.currentUsage, 
-                                 style = MaterialTheme.typography.titleMedium, // TitleLarge->TitleMedium
-                                 fontWeight = FontWeight.Bold,
-                                 color = MaterialTheme.colorScheme.secondary
-                             )
-                         }
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Green Icon
+                            Icon(Icons.Default.WifiTethering, contentDescription = null, tint = Color(0xFF4CAF50))
+                            Spacer(Modifier.width(16.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Better Network Found", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = titleColor)
+                                Text("Switch to: ${network.ssid} (${if (network.frequency > 4900) "5GHz" else "2.4GHz"})", style = MaterialTheme.typography.bodySmall, color = bodyColor)
+                            }
+                            Button(
+                                onClick = { viewModel.performPendingSwitch() },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF4CAF50), // Hardcoded Green
+                                    contentColor = Color.White
+                                )
+                            ) {
+                                Text("Switch")
+                            }
+                            IconButton(onClick = { viewModel.clearPendingSwitch() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = bodyColor)
+                            }
+                        }
                     }
                 }
-                
-                Spacer(modifier = Modifier.height(16.dp)) // Reduced 24->16
+            }
 
-                // --- Quick Action Cards (Restored) ---
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(340.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { viewModel.showAvailableNetworks() } // Tap Radar to Open Dialog
+            ) {
+                val radarColor = getRadarColor(uiState.internetStatus, uiState.signalStrength, uiState.connectionSource)
+                LiquidRadar(
+                    modifier = Modifier.fillMaxSize(),
+                    blobColor = radarColor,
+                    pulseSpeed = if (uiState.internetStatus == "Connected" || uiState.signalStrength > -75) 1.0f else 0.5f
+                )
+                
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(220.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha=0.1f), CircleShape)
                 ) {
-                    QuickActionCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Gamepad,
-                        label = "Gaming Mode",
-                        description = "Pause scanning",
-                        isActive = uiState.isGamingMode,
-                        onClick = { viewModel.toggleGamingMode() }
+                    val rssi = uiState.signalStrength
+                    val signalProgress = ((rssi + 140).toFloat() / 100f).coerceIn(0f, 1f)
+                    
+                    CircularProgressIndicator(
+                        progress = 1f,
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        strokeWidth = 6.dp
                     )
-                    QuickActionCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.SignalCellular4Bar,
-                        label = "Data Fallback",
-                        description = "Mobile backup",
-                        isActive = uiState.isDataFallback,
-                        onClick = { viewModel.toggleDataFallback() }
+                    
+                    CircularProgressIndicator(
+                        progress = signalProgress,
+                        modifier = Modifier.fillMaxSize(),
+                        color = radarColor,
+                        strokeWidth = 6.dp
                     )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp)) // Reduced 24->16
                 
-                OutlinedButton(onClick = onSettingsClick, modifier = Modifier.fillMaxWidth()) {
-                    Text("Advanced Settings")
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        val connectionSource = uiState.connectionSource
+                        val signalIcon = when (connectionSource) {
+                            ConnectionSource.MOBILE_DATA -> Icons.Default.SignalCellular4Bar
+                            else -> getWifiSignalIcon(uiState.signalStrength)
+                        }
+                        
+                        Icon(
+                            imageVector = signalIcon,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = radarColor
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = if (connectionSource == ConnectionSource.MOBILE_DATA) uiState.currentSsid else uiState.currentSsid.replace("\"", ""),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                        
+                        Spacer(modifier = Modifier.height(4.dp))
+
+
+                        val infoText = if (uiState.connectionSource == ConnectionSource.MOBILE_DATA) 
+                                            "${uiState.signalStrength} dBm" 
+                                       else 
+                                            "${uiState.frequencyBand} • ${uiState.signalStrength} dBm"
+                                            
+                        Text(
+                            text = infoText, 
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Medium
+                        )
+                        
+                        Text(
+                            text = "[DBG: ${uiState.signalStrength} | ${uiState.internetStatus}]",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 8.sp,
+                            color = Color.LightGray
+                        )
+                    }
                 }
-    }
-    // --- Switch Confirmation Dialog Removed (Auto-Switch enabled) ---
-    // if (uiState.pendingSwitchNetwork != null) { ... }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // --- OVERLAY PERMISSION PROMPT ---
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(context)) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Layers, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+                        Spacer(Modifier.width(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Enable Switch Badge", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text("Get a floating icon when a better network is found.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Button(
+                            onClick = { 
+                                val intent = android.content.Intent(
+                                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    android.net.Uri.parse("package:${context.packageName}")
+                                )
+                                context.startActivity(intent)
+                            },
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Enable")
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                StatusIcon(
+                    icon = Icons.Rounded.Router,
+                    label = "Router",
+                    isActive = uiState.connectionSource == ConnectionSource.WIFI_ROUTER
+                )
+                StatusIcon(
+                    icon = Icons.Rounded.WifiTethering,
+                    label = "Hotspot",
+                    isActive = uiState.connectionSource == ConnectionSource.WIFI_HOTSPOT
+                )
+                StatusIcon(
+                    icon = Icons.Rounded.SignalCellularAlt,
+                    label = "Mobile",
+                    isActive = uiState.connectionSource == ConnectionSource.MOBILE_DATA
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+    
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Link Speed", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            text = "${uiState.linkSpeed} Mbps", 
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF4CAF50) // Green Theme
+                        )
+                    }
+                     
+                    Box(modifier = Modifier.width(1.dp).height(32.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.2f)))
+    
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Current Usage", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            text = uiState.currentUsage, 
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF4CAF50) // Green Theme
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(text = "Status: ${uiState.lastAction}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -310,116 +424,30 @@ fun StatusIcon(icon: ImageVector, label: String, isActive: Boolean) {
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+            tint = if (isActive) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
             modifier = Modifier.size(32.dp)
         )
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+            color = if (isActive) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun QuickActionCard(
-    modifier: Modifier = Modifier, 
-    icon: ImageVector, 
-    label: String, 
-    description: String,
-    isActive: Boolean,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = modifier,
-        onClick = onClick,
-        colors = CardDefaults.cardColors(
-            containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(imageVector = icon, contentDescription = null)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = label, 
-                style = MaterialTheme.typography.labelMedium, 
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-             Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 12.sp,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = if (isActive) "ON" else "OFF",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-        }
-    }
-}
-
-@Composable
-fun StatusCard(
-    title: String, 
-    value: String, 
-    icon: ImageVector, 
-    tint: Color,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(imageVector = icon, contentDescription = null, tint = tint)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = title, style = MaterialTheme.typography.labelMedium)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-
-
-fun getRadarColor(status: String): Color {
-    return when (status) {
-        "Connected" -> Color(0xFF4CAF50) // Green
-        "No Internet" -> Color(0xFFF44336) // Red
-        else -> Color(0xFFFFC107) // Yellow
+fun getRadarColor(status: String, rssi: Int, source: ConnectionSource): Color {
+    if (status == "No Internet") return Color(0xFFF44336) // Red (Priority Warning)
+    if (source == ConnectionSource.MOBILE_DATA) return Color(0xFF2196F3) // Blue
+    
+    // WiFi Signal Thresholds
+    return when {
+         rssi >= -65 -> Color(0xFF4CAF50) // Strong Green
+         rssi >= -80 -> Color(0xFFFFC107) // Moderate Yellow
+         else -> Color(0xFFFF5722) // Weak Orange/Red
     }
 }
 
 fun getWifiSignalIcon(rssi: Int): ImageVector {
     val level = android.net.wifi.WifiManager.calculateSignalLevel(rssi, 5)
-    return when (level) {
-        4 -> Icons.Default.SignalWifi4Bar
-        3 -> Icons.Default.SignalWifi4Bar // Fallback: 3Bar missing
-        2 -> Icons.Default.SignalWifi0Bar // Fallback: 2Bar missing
-        1 -> Icons.Default.SignalWifi0Bar // Fallback: 1Bar missing
-        else -> Icons.Default.SignalWifi0Bar
-    }
-}
-
-fun getMobileSignalIcon(dbm: Int): ImageVector {
-    // Approximate mapping with available icons
-    return when {
-         dbm > -90 -> Icons.Default.SignalCellular4Bar
-         dbm > -105 -> Icons.Default.SignalCellular4Bar // Fallback
-         else -> Icons.Default.SignalCellular0Bar // Fallback
-    }
+    return if (level >= 4) Icons.Rounded.SignalWifi4Bar else Icons.Rounded.SignalWifi0Bar
 }
