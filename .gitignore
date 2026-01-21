@@ -8,6 +8,9 @@ local.properties
 # Log/OS Files
 *.log
 
+# Build Log txt
+build_*.txt
+
 # Android Studio generated files and folders
 captures/
 .externalNativeBuild/
@@ -27,11 +30,5 @@ render.experimental.xml
 *.jks
 *.keystore
 
-# Google Services (e.g. APIs or Firebase)
-google-services.json
-
 # Android Profiling
 *.hprof
-
-# Google Service
-app/google-services.json

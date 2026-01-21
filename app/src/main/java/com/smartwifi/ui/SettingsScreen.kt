@@ -49,62 +49,7 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .fillMaxSize()
         ) {
-            // -- DEBUG LOGS SECTION --
-            var showLogDialog by remember { mutableStateOf(false) }
-            var logContent by remember { mutableStateOf("") }
-            
-            SettingsCard(title = "Developer Tools") {
-                OutlinedButton(
-                    onClick = { 
-                        logContent = viewModel.getLogs()
-                        showLogDialog = true 
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF4CAF50))
-                ) {
-                    Text("View Offline Logs")
-                }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                OutlinedButton(
-                    onClick = { 
-                        viewModel.clearLogs()
-                        Toast.makeText(context, "Logs Cleared", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF4CAF50))
-                ) {
-                    Text("Clear Logs")
-                }
-            }
-            
-            if (showLogDialog) {
-                // Poll for updates every 1s
-                LaunchedEffect(Unit) {
-                    while(true) {
-                        logContent = viewModel.getLogs()
-                        kotlinx.coroutines.delay(1000)
-                    }
-                }
-                
-                AlertDialog(
-                    onDismissRequest = { showLogDialog = false },
-                    title = { Text("Debug Logs (Live)") },
-                    text = {
-                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                            Text(text = logContent, style = MaterialTheme.typography.bodySmall)
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { showLogDialog = false }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))) {
-                            Text("Close")
-                        }
-                    }
-                )
-            }
+            // -- DEBUG LOGS REMOVED --
             // -- END DEBUG LOGS SECTION --
             
             Spacer(modifier = Modifier.height(24.dp))

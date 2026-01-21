@@ -21,7 +21,9 @@ import javax.inject.Singleton
 import kotlin.math.roundToInt
 
 @Singleton
-class FastSpeedTestManager @Inject constructor() {
+class FastSpeedTestManager @Inject constructor(
+    private val analyticsManager: com.smartwifi.analytics.AnalyticsManager
+) {
 
     data class MetricData(
         val downloadSpeed: Double? = null,
@@ -81,7 +83,10 @@ class FastSpeedTestManager @Inject constructor() {
             val uploadSpeed = runUploadTest(targets)
              _metricData.value = _metricData.value.copy(uploadSpeed = uploadSpeed)
             
+            _metricData.value = _metricData.value.copy(uploadSpeed = uploadSpeed)
+            
             _testState.value = TestState.Finished(downloadSpeed, uploadSpeed)
+            analyticsManager.logSpeedTest(downloadSpeed, uploadSpeed, _metricData.value.idlePing)
             
         } catch (e: kotlinx.coroutines.CancellationException) {
             _testState.value = TestState.Idle

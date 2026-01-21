@@ -33,6 +33,7 @@ class SmartWifiService : Service() {
     @Inject lateinit var brain: com.smartwifi.logic.NetworkDecisionBrain
     @Inject lateinit var actionManager: com.smartwifi.logic.WifiActionManager
     @Inject lateinit var debugger: com.smartwifi.logic.SmartWifiDebugger
+    @Inject lateinit var analyticsManager: com.smartwifi.analytics.AnalyticsManager
 
     private val serviceJob = Job()
     // Use a dedicated thread for the service to avoid thread pool suspension issues during screen off
@@ -124,6 +125,7 @@ class SmartWifiService : Service() {
         
         // AUTO-START LOGIC: Ensure optimization is active
         repository.updateServiceStatus(true)
+        analyticsManager.logServiceStarted()
         startMonitoring()
     }
 
@@ -323,6 +325,7 @@ class SmartWifiService : Service() {
     private val windowManager by lazy { getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager }
 
     private fun showBadge(isWarning: Boolean = false, ssid: String? = null) {
+        analyticsManager.logBadgeShown(ssid)
         val canDraw = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) 
             android.provider.Settings.canDrawOverlays(this) 
         else true
@@ -776,6 +779,7 @@ class SmartWifiService : Service() {
                  if (bestCandidate == null) {
                      bestCandidate = scan
                      statusMsg = if (is5Ghz) "Better 5G Found: ${scan.SSID}" else "Stronger Signal Found: ${scan.SSID}"
+                     analyticsManager.logBetterNetworkFound(scan.SSID, scan.level, is5Ghz)
                  } else {
                      val bestIs5G = bestCandidate.frequency > 4900
                      

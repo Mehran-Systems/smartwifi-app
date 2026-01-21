@@ -310,12 +310,7 @@ fun DashboardScreen(
                             fontWeight = FontWeight.Medium
                         )
                         
-                        Text(
-                            text = "[DBG: ${uiState.signalStrength} | ${uiState.internetStatus}]",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 8.sp,
-                            color = Color.LightGray
-                        )
+
                     }
                 }
             }

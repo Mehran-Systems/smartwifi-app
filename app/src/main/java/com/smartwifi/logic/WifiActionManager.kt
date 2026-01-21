@@ -12,7 +12,8 @@ import javax.inject.Singleton
 @Singleton
 class WifiActionManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val debugger: SmartWifiDebugger
+    private val debugger: SmartWifiDebugger,
+    private val analyticsManager: com.smartwifi.analytics.AnalyticsManager
 ) {
     private val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
     private var lastSuggestions: List<WifiNetworkSuggestion> = emptyList()
@@ -74,6 +75,7 @@ class WifiActionManager @Inject constructor(
                 if (status == WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS) {
                     lastSuggestions = suggestions
                     debugger.logOsSuggestion("Batch", "${suggestions.size} networks submitted")
+                    analyticsManager.logSuggestionBatch(suggestions.size)
                     Log.d("WifiActionManager", "Batch Suggestion Success. Count: ${suggestions.size}")
                 } else if (status == WifiManager.STATUS_NETWORK_SUGGESTIONS_ERROR_ADD_DUPLICATE) {
                     Log.e("WifiActionManager", "Error: Duplicate network suggestions.")

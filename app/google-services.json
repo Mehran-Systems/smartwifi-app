@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "368425468620",
+    "project_id": "sensefi-a02cc",
+    "storage_bucket": "sensefi-a02cc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:368425468620:android:4fe753bea5b977673e3869",
+        "android_client_info": {
+          "package_name": "com.example.smartwifi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCFKf-Sb86XKXLS6NxCInhhMyQLSyct5JU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
