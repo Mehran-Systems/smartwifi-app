@@ -409,6 +409,76 @@ fun DashboardScreen(
             
             Spacer(modifier = Modifier.height(16.dp))
             Text(text = "Status: ${uiState.lastAction}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // --- NATIVE AD (Advanced) ---
+            androidx.compose.ui.viewinterop.AndroidView(
+                factory = { ctx ->
+                    val adView = android.view.LayoutInflater.from(ctx).inflate(com.smartwifi.R.layout.native_ad_unified, null) as com.google.android.gms.ads.nativead.NativeAdView
+                    
+                    val adLoader = com.google.android.gms.ads.AdLoader.Builder(ctx, "ca-app-pub-4821498341675476/3478004488")
+                        .forNativeAd { nativeAd ->
+                            // Populate Assets
+                            adView.headlineView = adView.findViewById(com.smartwifi.R.id.ad_headline)
+                            adView.bodyView = adView.findViewById(com.smartwifi.R.id.ad_body)
+                            adView.callToActionView = adView.findViewById(com.smartwifi.R.id.ad_call_to_action)
+                            adView.iconView = adView.findViewById(com.smartwifi.R.id.ad_app_icon)
+                            adView.priceView = adView.findViewById(com.smartwifi.R.id.ad_price)
+                            adView.starRatingView = adView.findViewById(com.smartwifi.R.id.ad_stars)
+                            adView.storeView = adView.findViewById(com.smartwifi.R.id.ad_store)
+                            adView.advertiserView = adView.findViewById(com.smartwifi.R.id.ad_advertiser)
+                            adView.mediaView = adView.findViewById(com.smartwifi.R.id.ad_media)
+                            
+                            (adView.headlineView as android.widget.TextView).text = nativeAd.headline
+                            (adView.bodyView as android.widget.TextView).text = nativeAd.body
+                            (adView.callToActionView as android.widget.Button).text = nativeAd.callToAction
+                            
+                            val icon = nativeAd.icon
+                            if (icon != null) {
+                                (adView.iconView as android.widget.ImageView).setImageDrawable(icon.drawable)
+                                adView.iconView?.visibility = android.view.View.VISIBLE
+                            } else {
+                                adView.iconView?.visibility = android.view.View.GONE
+                            }
+                            
+                            if (nativeAd.price == null) {
+                                adView.priceView?.visibility = android.view.View.INVISIBLE
+                            } else {
+                                adView.priceView?.visibility = android.view.View.VISIBLE
+                                (adView.priceView as android.widget.TextView).text = nativeAd.price
+                            }
+                            
+                            if (nativeAd.store == null) {
+                                adView.storeView?.visibility = android.view.View.INVISIBLE
+                            } else {
+                                adView.storeView?.visibility = android.view.View.VISIBLE
+                                (adView.storeView as android.widget.TextView).text = nativeAd.store
+                            }
+                            
+                            if (nativeAd.starRating == null) {
+                                adView.starRatingView?.visibility = android.view.View.INVISIBLE
+                            } else {
+                                (adView.starRatingView as android.widget.RatingBar).rating = nativeAd.starRating!!.toFloat()
+                                adView.starRatingView?.visibility = android.view.View.VISIBLE
+                            }
+                            
+                            if (nativeAd.advertiser == null) {
+                                adView.advertiserView?.visibility = android.view.View.INVISIBLE
+                            } else {
+                                (adView.advertiserView as android.widget.TextView).text = nativeAd.advertiser
+                                adView.advertiserView?.visibility = android.view.View.VISIBLE
+                            }
+                            
+                            adView.setNativeAd(nativeAd)
+                        }
+                        .build()
+                    adLoader.loadAd(com.google.android.gms.ads.AdRequest.Builder().build())
+                    adView
+                },
+                modifier = Modifier.fillMaxWidth().wrapContentHeight()
+            )
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

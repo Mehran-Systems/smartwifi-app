@@ -417,6 +417,26 @@ fun SpeedTestScreen(
                     }
                 }
                 
+                
+            
+                Spacer(modifier = Modifier.height(24.dp))
+            
+                // --- BANNER AD (Footer) ---
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.ui.viewinterop.AndroidView(
+                        factory = { ctx ->
+                            com.google.android.gms.ads.AdView(ctx).apply {
+                                setAdSize(com.google.android.gms.ads.AdSize.BANNER)
+                                adUnitId = "ca-app-pub-4821498341675476/9987572518"
+                                loadAd(com.google.android.gms.ads.AdRequest.Builder().build())
+                            }
+                        }
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(80.dp))
             }
         }

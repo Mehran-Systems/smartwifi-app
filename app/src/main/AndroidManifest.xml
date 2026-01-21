@@ -69,6 +69,15 @@
             android:exported="false"
             android:foregroundServiceType="dataSync|location|mediaPlayback" />
 
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-4821498341675476~1993177207"/>
+
+        <property
+            android:name="android.adservices.AD_SERVICES_CONFIG"
+            android:resource="@xml/gma_ad_services_config"
+            tools:replace="android:resource" />
+
     </application>
 
 </manifest>
